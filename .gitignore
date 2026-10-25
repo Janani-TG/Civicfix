@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+node_modules/
+**/node_modules/
+uploads/
+**/uploads/
+*.log
+.DS_Store
+
+backend/civicfix.db
+android/.idea/
+frontend/civicfix.apk

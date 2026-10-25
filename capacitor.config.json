@@ -1,0 +1,8 @@
+{
+  "appId": "com.civicfix.app",
+  "appName": "CivicFix",
+  "webDir": "frontend",
+  "server": {
+    "cleartext": true
+  }
+}

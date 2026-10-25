@@ -1,0 +1,2388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citizen Grievance & Activity Dashboard - CivicFix</title>
+
+    <!-- Google Fonts: Public Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Google Material Symbols Outlined -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <!-- Leaflet Map CSS & JS for Interactive Pinning -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- API Config & Interceptor for Mobile -->
+    <script src="../js/api-config.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Public Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.08); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .shutter-glow {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen pb-20 select-none">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                    <span class="material-symbols-outlined text-xl">account_balance</span>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight text-slate-900">CivicFix</span>
+                    <span class="text-xs text-slate-400 font-medium ml-1">/ Citizen Dashboard</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="text-right hidden sm:block">
+                    <span id="citizen-name-display" class="block text-xs font-bold text-slate-900">Citizen</span>
+                    <span id="citizen-phone-display" class="block text-[10px] text-slate-400">+91 00000 00000</span>
+                </div>
+                <button type="button" onclick="handleSignOut()" class="w-9 h-9 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 flex items-center justify-center text-slate-500 transition-colors cursor-pointer" title="Sign Out">
+                    <span class="material-symbols-outlined text-xl">logout</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+        
+        <!-- Welcome Banner -->
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg shadow-blue-500/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+                <span class="text-xs font-bold uppercase tracking-wider text-blue-200">Coimbatore Municipal Corporation</span>
+                <h1 class="text-2xl font-extrabold mt-0.5">Welcome, <span id="welcome-name">Citizen</span></h1>
+                <p class="text-xs text-blue-100 mt-1 max-w-md">Report civic grievances with photos, track status in real-time, upvote community issues, and earn civic rewards!</p>
+            </div>
+            <button type="button" onclick="openNewComplaintModal()"
+                class="px-4 py-2.5 rounded-xl bg-white text-blue-700 font-bold text-xs shadow-sm hover:bg-blue-50 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer">
+                <span class="material-symbols-outlined text-lg">add_a_photo</span>
+                <span>Report Issue</span>
+            </button>
+        </div>
+
+        <!-- DASHBOARD STATS OVERVIEW -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <!-- Total Filed -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Total Filed</span>
+                    <span class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-base">assignment</span>
+                    </span>
+                </div>
+                <div class="text-2xl font-black text-slate-900 mt-2" id="stat-total">0</div>
+                <p class="text-[10px] text-slate-400 mt-0.5">Registered issues</p>
+            </div>
+
+            <!-- In Progress -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-slate-400 tracking-wider">In Progress</span>
+                    <span class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-base">pending_actions</span>
+                    </span>
+                </div>
+                <div class="text-2xl font-black text-indigo-600 mt-2" id="stat-progress">0</div>
+                <p class="text-[10px] text-slate-400 mt-0.5">Under field action</p>
+            </div>
+
+            <!-- Resolved -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Resolved</span>
+                    <span class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-base">task_alt</span>
+                    </span>
+                </div>
+                <div class="text-2xl font-black text-emerald-600 mt-2" id="stat-resolved">0</div>
+                <p class="text-[10px] text-slate-400 mt-0.5">Successfully solved</p>
+            </div>
+
+            <!-- Resolution Rate -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Success Rate</span>
+                    <span class="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-base">insights</span>
+                    </span>
+                </div>
+                <div class="text-2xl font-black text-slate-900 mt-2" id="stat-rate">0%</div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                    <div id="stat-rate-bar" class="bg-emerald-500 h-1.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NAVIGATION TABS -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 p-1.5 flex flex-wrap items-center justify-between shadow-xs gap-2">
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                <button type="button" id="tab-btn-complaints" onclick="switchMainTab('complaints')"
+                    class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-blue-600 text-white shadow-xs">
+                    <span class="material-symbols-outlined text-base">format_list_bulleted</span>
+                    <span>My Complaints</span>
+                    <span id="tab-count-complaints" class="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">0</span>
+                </button>
+
+                <button type="button" id="tab-btn-community" onclick="switchMainTab('community')"
+                    class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-base text-amber-500">local_fire_department</span>
+                    <span>Community Feed</span>
+                </button>
+
+                <button type="button" id="tab-btn-activity" onclick="switchMainTab('activity')"
+                    class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-base">timeline</span>
+                    <span>Activity Stream</span>
+                    <span id="tab-count-activity" class="px-1.5 py-0.2 rounded-full bg-slate-200 text-[10px] text-slate-700">0</span>
+                </button>
+            </div>
+
+            <button type="button" onclick="refreshAllData()" class="px-3 py-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">refresh</span>
+                <span class="hidden sm:inline">Refresh</span>
+            </button>
+        </div>
+
+        <!-- TAB 1: MY COMPLAINTS LIST -->
+        <div id="section-complaints" class="space-y-4">
+            
+            <!-- Search & Filters -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div class="relative flex-1">
+                    <span class="material-symbols-outlined text-slate-400 text-lg absolute left-3 top-2.5">search</span>
+                    <input type="text" id="search-complaints" oninput="applyFilters()" placeholder="Search title, ward, category or #CF-id..."
+                        class="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+
+                <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                    <select id="filter-category" onchange="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 focus:border-blue-600">
+                        <option value="ALL">All Categories</option>
+                        <option value="Sanitation & Waste">Sanitation & Waste</option>
+                        <option value="Electrical & Lights">Electrical & Lights</option>
+                        <option value="Road Works & Infrastructure">Road Works & Infrastructure</option>
+                        <option value="Water Supply & Drainage">Water Supply & Drainage</option>
+                        <option value="Public Health">Public Health</option>
+                        <option value="Town Planning">Town Planning</option>
+                    </select>
+
+                    <select id="filter-status" onchange="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 focus:border-blue-600">
+                        <option value="ALL">All Statuses</option>
+                        <option value="Received">Received</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Complaints Cards Container -->
+            <div id="complaints-list" class="space-y-3">
+                <div class="animate-pulse space-y-3">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 h-28"></div>
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 h-28"></div>
+                </div>
+            </div>
+
+            <div id="empty-complaints" class="hidden py-14 text-center bg-white rounded-2xl border border-slate-200 p-6">
+                <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
+                    <span class="material-symbols-outlined text-2xl">checklist</span>
+                </div>
+                <h3 class="text-sm font-bold text-slate-800">No Complaints Found</h3>
+                <p class="text-xs text-slate-400 mt-0.5 max-w-xs mx-auto">No complaints match your active filters. Click 'Report Issue' above to file a new civic problem.</p>
+            </div>
+        </div>
+
+        <!-- TAB 2: ACTIVITY STREAM -->
+        <div id="section-activity" class="hidden space-y-3">
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-900">Recent Grievance Updates & Activity</h2>
+                        <p class="text-xs text-slate-400">Live feed of updates made to your complaints</p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                        <span>Live Stream</span>
+                    </span>
+                </div>
+
+                <div id="activity-stream-list" class="space-y-3">
+                    <!-- Dynamically populated -->
+                </div>
+
+                <div id="empty-activity" class="hidden py-10 text-center text-slate-400 text-xs">
+                    <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">history_toggle_off</span>
+                    <p>No recent activity recorded yet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: COMMUNITY FEED ("ME TOO" UPVOTING) -->
+        <div id="section-community" class="hidden space-y-4">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-600 rounded-3xl p-5 text-white shadow-md flex items-center justify-between">
+                <div>
+                    <span class="px-2.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold uppercase tracking-wider text-amber-100">City Community Feed</span>
+                    <h2 class="text-xl font-extrabold mt-1">🔥 "Me Too" Civic Upvoting</h2>
+                    <p class="text-xs text-amber-100 mt-0.5 max-w-md">Upvote existing issues near your neighborhood to auto-escalate municipal priority! Earn +2 Civic Points for every upvote.</p>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-white/20 text-white flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-3xl">local_fire_department</span>
+                </div>
+            </div>
+
+            <!-- Search & Filters -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div class="relative flex-1">
+                    <span class="material-symbols-outlined text-slate-400 text-lg absolute left-3 top-2.5">search</span>
+                    <input type="text" id="search-community" oninput="applyCommunityFilters()" placeholder="Search community complaints or ward..."
+                        class="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:border-amber-500 focus:ring-2 focus:ring-amber-100">
+                </div>
+
+                <select id="filter-community-category" onchange="applyCommunityFilters()" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 focus:border-amber-500">
+                    <option value="ALL">All Categories</option>
+                    <option value="Sanitation & Waste">Sanitation & Waste</option>
+                    <option value="Electrical & Lights">Electrical & Lights</option>
+                    <option value="Road Works & Infrastructure">Road Works & Infrastructure</option>
+                    <option value="Water Supply & Drainage">Water Supply & Drainage</option>
+                    <option value="Public Health">Public Health</option>
+                    <option value="Town Planning">Town Planning</option>
+                </select>
+            </div>
+
+            <!-- Community Feed List -->
+            <div id="community-feed-list" class="space-y-3">
+                <div class="animate-pulse space-y-3">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 h-28"></div>
+                </div>
+            </div>
+
+            <div id="empty-community" class="hidden py-14 text-center bg-white rounded-2xl border border-slate-200 p-6">
+                <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-2">
+                    <span class="material-symbols-outlined text-2xl">local_fire_department</span>
+                </div>
+                <h3 class="text-sm font-bold text-slate-800">No Community Reports Found</h3>
+                <p class="text-xs text-slate-400 mt-0.5 max-w-xs mx-auto">No public complaints reported in this category yet.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal: Verify Resolution & Rate (Approve/Reject) -->
+    <div id="modal-verify-fix" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[92vh] overflow-y-auto transform transition-all space-y-4">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">fact_check</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Review & Verify Resolution</h2>
+                        <p id="verify-modal-ref" class="text-xs text-slate-400 font-mono">#CF-0000</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-verify-fix')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- BEFORE & AFTER PHOTO COMPARISON CAROUSEL/GRID -->
+            <div class="space-y-1.5">
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Before & After Photo Evidence</label>
+                <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <div>
+                        <span class="block text-[10px] font-bold uppercase text-slate-500 mb-1">📷 Before (Original Issue)</span>
+                        <div class="w-full h-36 rounded-xl bg-slate-200 overflow-hidden border border-slate-300 relative">
+                            <img id="verify-before-img" src="" class="w-full h-full object-cover cursor-pointer" onclick="openImageViewer(this.src, 'Original Reported Issue Photo')">
+                        </div>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] font-bold uppercase text-emerald-700 mb-1">✅ After (Staff Repair)</span>
+                        <div class="w-full h-36 rounded-xl bg-emerald-50 overflow-hidden border border-emerald-300 relative">
+                            <img id="verify-after-img" src="" class="w-full h-full object-cover cursor-pointer" onclick="openImageViewer(this.src, 'Staff Resolution Proof Photo')">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Complaint Details Summary -->
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1 text-xs">
+                <div class="font-bold text-slate-900 text-sm" id="verify-title">Issue Title</div>
+                <div class="text-slate-500 flex items-center gap-1">
+                    <span id="verify-category" class="font-semibold text-slate-700">Category</span> • <span id="verify-location">Location</span>
+                </div>
+            </div>
+
+            <!-- STAR RATING (Optional for Approval) -->
+            <div class="space-y-1.5 text-center bg-blue-50/60 border border-blue-100 p-3.5 rounded-2xl">
+                <label class="block text-xs font-bold text-blue-900 uppercase tracking-wider">Rate Resolution Quality (1-5 Stars)</label>
+                <div class="flex items-center justify-center gap-2 py-1" id="star-rating-container">
+                    <button type="button" onclick="setVerifyRating(1)" class="star-btn text-2xl text-amber-400 cursor-pointer">★</button>
+                    <button type="button" onclick="setVerifyRating(2)" class="star-btn text-2xl text-amber-400 cursor-pointer">★</button>
+                    <button type="button" onclick="setVerifyRating(3)" class="star-btn text-2xl text-amber-400 cursor-pointer">★</button>
+                    <button type="button" onclick="setVerifyRating(4)" class="star-btn text-2xl text-amber-400 cursor-pointer">★</button>
+                    <button type="button" onclick="setVerifyRating(5)" class="star-btn text-2xl text-amber-400 cursor-pointer">★</button>
+                </div>
+                <input type="hidden" id="verify-rating-val" value="5">
+            </div>
+
+            <!-- COMMENTS / REJECTION REASON -->
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Feedback / Rejection Reason</label>
+                <textarea id="verify-feedback-text" rows="2" placeholder="Leave your feedback (or enter rejection reason if the fix is unsatisfactory)..." class="w-full p-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"></textarea>
+            </div>
+
+            <!-- ACTION BUTTONS -->
+            <input type="hidden" id="verify-complaint-id">
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button type="button" onclick="handleVerifyFixAction('reject')" id="btn-verify-reject" class="py-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                    <span class="material-symbols-outlined text-base">close</span>
+                    <span>Reject & Reopen Fix</span>
+                </button>
+
+                <button type="button" onclick="handleVerifyFixAction('approve')" id="btn-verify-approve" class="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                    <span class="material-symbols-outlined text-base">check_circle</span>
+                    <span>Approve Fix (+15 Pts)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: New Complaint -->
+    <div id="modal-new-complaint" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[92vh] overflow-y-auto transform transition-all">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">add_alert</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Report a Civic Problem</h2>
+                        <p class="text-xs text-slate-400">Attach photo & provide issue details</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-new-complaint')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <form id="form-new-complaint" onsubmit="handleCreateComplaint(event)" class="mt-4 space-y-4">
+                
+                <!-- PHOTO CAPTURE & UPLOAD SECTION -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>Evidence / Issue Photo</span>
+                        <span class="text-[11px] font-normal text-slate-400 lowercase">camera capture or upload</span>
+                    </label>
+
+                    <input type="file" id="comp-file-input" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="handleFileChosen(event)">
+                    <input type="file" id="comp-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleFileChosen(event)">
+
+                    <!-- Photo Action Dropzone -->
+                    <div id="photo-picker-container" 
+                         ondragover="handleDragOver(event)" 
+                         ondragleave="handleDragLeave(event)" 
+                         ondrop="handleDrop(event)"
+                         onclick="if(event.target === this || !event.target.closest('button')) document.getElementById('comp-file-input').click()"
+                         class="border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50/70 hover:bg-blue-50/30 rounded-2xl p-4 text-center transition-all cursor-pointer">
+                        
+                        <div class="w-10 h-10 rounded-full bg-blue-100/70 text-blue-600 flex items-center justify-center mx-auto mb-2">
+                            <span class="material-symbols-outlined text-2xl">photo_camera</span>
+                        </div>
+                        <p class="text-xs font-bold text-slate-800">Add a Photo of the Problem</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5 mb-3">Clear photos help municipal teams resolve issues faster</p>
+
+                        <div class="flex items-center justify-center gap-2">
+                            <button type="button" onclick="openLiveCamera('new')" 
+                                class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors">
+                                <span class="material-symbols-outlined text-base">photo_camera</span>
+                                <span>Capture Photo</span>
+                            </button>
+
+                            <button type="button" onclick="document.getElementById('comp-file-input').click()" 
+                                class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors">
+                                <span class="material-symbols-outlined text-base">upload_file</span>
+                                <span>Upload File</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Photo Preview Card -->
+                    <div id="photo-preview-container" class="hidden bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                        <div class="flex items-center gap-3">
+                            <div class="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shrink-0 group">
+                                <img id="photo-preview-img" src="" alt="Selected Photo" class="w-full h-full object-cover">
+                                <button type="button" onclick="viewAttachedPhotoPreview('new')" 
+                                    class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer" title="Zoom">
+                                    <span class="material-symbols-outlined text-xl">zoom_in</span>
+                                </button>
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span id="photo-source-badge" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5">
+                                        <span class="material-symbols-outlined text-xs">check_circle</span>
+                                        <span>Photo Attached</span>
+                                    </span>
+                                </div>
+                                <p id="photo-filename" class="text-xs font-bold text-slate-900 truncate mt-1">photo.jpg</p>
+                                <p id="photo-filesize" class="text-[11px] text-slate-400">0 KB</p>
+
+                                <div class="flex items-center gap-2 mt-2">
+                                    <button type="button" onclick="openLiveCamera('new')" class="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-sm">cached</span>
+                                        <span>Retake</span>
+                                    </button>
+                                    <span class="text-slate-300">•</span>
+                                    <button type="button" onclick="removeSelectedPhoto('new')" class="text-xs font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-0.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-sm">delete</span>
+                                        <span>Remove</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TITLE -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Issue Title <span class="text-rose-500">*</span></label>
+                    <input type="text" id="comp-title" required placeholder="e.g. Broken streetlight on 4th cross road"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+
+                <!-- CATEGORY & PRIORITY -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Category <span class="text-rose-500">*</span></label>
+                        <select id="comp-category" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                            <option value="Sanitation & Waste">Sanitation & Waste</option>
+                            <option value="Electrical & Lights">Electrical & Lights</option>
+                            <option value="Road Works & Infrastructure">Road Works & Infrastructure</option>
+                            <option value="Water Supply & Drainage">Water Supply & Drainage</option>
+                            <option value="Public Health">Public Health</option>
+                            <option value="Town Planning">Town Planning</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Priority</label>
+                        <select id="comp-priority" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                            <option value="Low">Low</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- INTERACTIVE LOCATION & MAP PINNING -->
+                <div class="space-y-2 bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-base text-blue-600">distance</span>
+                            <span>Grievance Location & Map Pin</span>
+                            <span class="text-rose-500">*</span>
+                        </label>
+                        <button type="button" onclick="detectUserGpsLocation('new')" 
+                            class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200 flex items-center gap-1 transition-colors cursor-pointer" title="Auto-detect my current GPS coordinates">
+                            <span class="material-symbols-outlined text-sm text-blue-600">my_location</span>
+                            <span>Use My GPS</span>
+                        </button>
+                    </div>
+
+                    <!-- Location Input Field -->
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">pin_drop</span>
+                        <input type="text" id="comp-location" required placeholder="e.g. 100 Feet Road, Gandhipuram, Ward 24"
+                            class="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 font-medium">
+                    </div>
+
+                    <!-- Hidden Coordinate Fields -->
+                    <input type="hidden" id="comp-latitude" value="11.016844">
+                    <input type="hidden" id="comp-longitude" value="76.955833">
+                    <input type="hidden" id="comp-formatted-address" value="Gandhipuram, Coimbatore, Tamil Nadu">
+                    <input type="hidden" id="comp-place-name" value="Coimbatore Central">
+
+                    <!-- Interactive Map Card -->
+                    <div class="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-xs">
+                        <div class="px-3 py-1.5 bg-slate-100/80 border-b border-slate-200/80 flex items-center justify-between text-[11px]">
+                            <span class="font-bold text-slate-700 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs text-blue-600">explore</span>
+                                <span>Pin on Map (Click or Drag Marker)</span>
+                            </span>
+                            <a id="new-comp-gmaps-link" href="https://www.google.com/maps/search/?api=1&query=11.016844,76.955833" target="_blank" rel="noopener noreferrer" 
+                                class="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5 hover:underline">
+                                <span class="material-symbols-outlined text-xs">open_in_new</span>
+                                <span>Google Maps</span>
+                            </a>
+                        </div>
+
+                        <!-- Map Canvas -->
+                        <div id="new-comp-map" class="w-full h-44 bg-slate-100 z-10"></div>
+
+                        <!-- Coimbatore Quick Area Chips -->
+                        <div class="p-2 bg-slate-50 border-t border-slate-200/70">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Quick Coimbatore Hubs:</p>
+                            <div class="flex flex-wrap gap-1">
+                                <button type="button" onclick="panMapToArea('new', 11.0168, 76.9680, 'Gandhipuram, Ward 24')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Gandhipuram</button>
+                                <button type="button" onclick="panMapToArea('new', 11.0086, 76.9507, 'RS Puram, Ward 23')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">RS Puram</button>
+                                <button type="button" onclick="panMapToArea('new', 11.0267, 77.0028, 'Peelamedu, Ward 38')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Peelamedu</button>
+                                <button type="button" onclick="panMapToArea('new', 11.0321, 76.9392, 'Saibaba Colony, Ward 18')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Saibaba Colony</button>
+                                <button type="button" onclick="panMapToArea('new', 10.9890, 76.9600, 'Ukkadam, Ward 76')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Ukkadam</button>
+                                <button type="button" onclick="panMapToArea('new', 11.0827, 76.9958, 'Saravanampatti, Ward 08')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Saravanampatti</button>
+                                <button type="button" onclick="panMapToArea('new', 10.9995, 77.0210, 'Singanallur, Ward 58')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Singanallur</button>
+                            </div>
+                        </div>
+
+                        <!-- Live Pinned Info Footer -->
+                        <div class="px-3 py-1.5 bg-blue-50/70 border-t border-blue-100 flex items-center justify-between text-[11px] text-blue-900">
+                            <span class="flex items-center gap-1 font-mono font-medium" id="new-comp-coords-display">
+                                <span class="material-symbols-outlined text-xs text-blue-600">location_on</span>
+                                <span>11.016844, 76.955833</span>
+                            </span>
+                            <span class="px-1.5 py-0.2 rounded bg-blue-200/80 text-blue-950 font-bold text-[10px]">Pinned for Google Maps</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DESCRIPTION -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Description <span class="text-rose-500">*</span></label>
+                    <textarea id="comp-description" required rows="3" placeholder="Provide complete details about the issue..."
+                        class="w-full p-3 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100"></textarea>
+                </div>
+
+                <!-- SUBMIT BUTTON -->
+                <button type="submit" id="btn-submit-complaint"
+                    class="w-full mt-2 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all">
+                    <span class="material-symbols-outlined text-lg">send</span>
+                    <span>Submit Complaint</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Complaint -->
+    <div id="modal-edit-complaint" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[92vh] overflow-y-auto transform transition-all">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">edit_note</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Edit Complaint</h2>
+                        <p id="edit-ref-id" class="text-xs text-slate-400 font-mono">#CF-0000</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-edit-complaint')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <form id="form-edit-complaint" onsubmit="handleUpdateComplaint(event)" class="mt-4 space-y-4">
+                <input type="hidden" id="edit-complaint-id">
+
+                <!-- PHOTO MANAGER IN EDIT -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>Evidence / Issue Photo</span>
+                        <span class="text-[11px] font-normal text-slate-400 lowercase">replace or keep photo</span>
+                    </label>
+
+                    <input type="file" id="edit-file-input" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="handleEditFileChosen(event)">
+                    <input type="file" id="edit-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleEditFileChosen(event)">
+
+                    <!-- Edit Photo Box -->
+                    <div id="edit-photo-container" class="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                        <div class="flex items-center gap-3">
+                            <div class="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shrink-0 group">
+                                <img id="edit-photo-preview-img" src="" alt="Complaint Photo" class="w-full h-full object-cover">
+                                <button type="button" onclick="viewAttachedPhotoPreview('edit')" 
+                                    class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer">
+                                    <span class="material-symbols-outlined text-xl">zoom_in</span>
+                                </button>
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                <span id="edit-photo-status-badge" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Current Photo</span>
+                                <p id="edit-photo-name" class="text-xs font-bold text-slate-900 truncate mt-1">photo.jpg</p>
+
+                                <div class="flex flex-wrap items-center gap-2 mt-2">
+                                    <button type="button" onclick="openLiveCamera('edit')" class="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-sm">photo_camera</span>
+                                        <span>Camera</span>
+                                    </button>
+                                    <span class="text-slate-300">•</span>
+                                    <button type="button" onclick="document.getElementById('edit-file-input').click()" class="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-sm">upload_file</span>
+                                        <span>Upload</span>
+                                    </button>
+                                    <span class="text-slate-300">•</span>
+                                    <button type="button" onclick="markRemoveEditPhoto()" class="text-xs font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-0.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-sm">delete</span>
+                                        <span>Remove</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TITLE -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Issue Title <span class="text-rose-500">*</span></label>
+                    <input type="text" id="edit-title" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+
+                <!-- CATEGORY & PRIORITY -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Category <span class="text-rose-500">*</span></label>
+                        <select id="edit-category" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                            <option value="Sanitation & Waste">Sanitation & Waste</option>
+                            <option value="Electrical & Lights">Electrical & Lights</option>
+                            <option value="Road Works & Infrastructure">Road Works & Infrastructure</option>
+                            <option value="Water Supply & Drainage">Water Supply & Drainage</option>
+                            <option value="Public Health">Public Health</option>
+                            <option value="Town Planning">Town Planning</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Priority</label>
+                        <select id="edit-priority" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- INTERACTIVE LOCATION & MAP PINNING IN EDIT -->
+                <div class="space-y-2 bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-base text-blue-600">distance</span>
+                            <span>Grievance Location & Map Pin</span>
+                            <span class="text-rose-500">*</span>
+                        </label>
+                        <button type="button" onclick="detectUserGpsLocation('edit')" 
+                            class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200 flex items-center gap-1 transition-colors cursor-pointer" title="Auto-detect my current GPS coordinates">
+                            <span class="material-symbols-outlined text-sm text-blue-600">my_location</span>
+                            <span>Use My GPS</span>
+                        </button>
+                    </div>
+
+                    <!-- Location Input Field -->
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">pin_drop</span>
+                        <input type="text" id="edit-location" required class="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 font-medium">
+                    </div>
+
+                    <!-- Hidden Coordinate Fields -->
+                    <input type="hidden" id="edit-latitude">
+                    <input type="hidden" id="edit-longitude">
+                    <input type="hidden" id="edit-formatted-address">
+                    <input type="hidden" id="edit-place-name">
+
+                    <!-- Interactive Map Card -->
+                    <div class="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-xs">
+                        <div class="px-3 py-1.5 bg-slate-100/80 border-b border-slate-200/80 flex items-center justify-between text-[11px]">
+                            <span class="font-bold text-slate-700 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs text-blue-600">explore</span>
+                                <span>Adjust Pin on Map (Click or Drag)</span>
+                            </span>
+                            <a id="edit-comp-gmaps-link" href="https://www.google.com/maps/search/?api=1&query=11.0168,76.9558" target="_blank" rel="noopener noreferrer" 
+                                class="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5 hover:underline">
+                                <span class="material-symbols-outlined text-xs">open_in_new</span>
+                                <span>Google Maps</span>
+                            </a>
+                        </div>
+
+                        <!-- Map Canvas -->
+                        <div id="edit-comp-map" class="w-full h-44 bg-slate-100 z-10"></div>
+
+                        <!-- Coimbatore Quick Area Chips -->
+                        <div class="p-2 bg-slate-50 border-t border-slate-200/70">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Quick Coimbatore Hubs:</p>
+                            <div class="flex flex-wrap gap-1">
+                                <button type="button" onclick="panMapToArea('edit', 11.0168, 76.9680, 'Gandhipuram, Ward 24')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Gandhipuram</button>
+                                <button type="button" onclick="panMapToArea('edit', 11.0086, 76.9507, 'RS Puram, Ward 23')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">RS Puram</button>
+                                <button type="button" onclick="panMapToArea('edit', 11.0267, 77.0028, 'Peelamedu, Ward 38')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Peelamedu</button>
+                                <button type="button" onclick="panMapToArea('edit', 11.0321, 76.9392, 'Saibaba Colony, Ward 18')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Saibaba Colony</button>
+                                <button type="button" onclick="panMapToArea('edit', 10.9890, 76.9600, 'Ukkadam, Ward 76')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Ukkadam</button>
+                                <button type="button" onclick="panMapToArea('edit', 11.0827, 76.9958, 'Saravanampatti, Ward 08')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Saravanampatti</button>
+                                <button type="button" onclick="panMapToArea('edit', 10.9995, 77.0210, 'Singanallur, Ward 58')" class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300">Singanallur</button>
+                            </div>
+                        </div>
+
+                        <!-- Live Pinned Info Footer -->
+                        <div class="px-3 py-1.5 bg-blue-50/70 border-t border-blue-100 flex items-center justify-between text-[11px] text-blue-900">
+                            <span class="flex items-center gap-1 font-mono font-medium" id="edit-comp-coords-display">
+                                <span class="material-symbols-outlined text-xs text-blue-600">location_on</span>
+                                <span>11.016844, 76.955833</span>
+                            </span>
+                            <span class="px-1.5 py-0.2 rounded bg-blue-200/80 text-blue-950 font-bold text-[10px]">Pinned for Google Maps</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DESCRIPTION -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Description <span class="text-rose-500">*</span></label>
+                    <textarea id="edit-description" required rows="3" class="w-full p-3 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100"></textarea>
+                </div>
+
+                <!-- SAVE BUTTON -->
+                <button type="submit" id="btn-save-edit"
+                    class="w-full mt-2 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all">
+                    <span class="material-symbols-outlined text-lg">save</span>
+                    <span>Save Changes</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Delete Confirmation -->
+    <div id="modal-delete-confirm" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl border border-slate-200 shadow-2xl p-6 text-center transform transition-all">
+            <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
+                <span class="material-symbols-outlined text-2xl">delete_forever</span>
+            </div>
+            <h3 class="text-base font-bold text-slate-900">Delete Complaint?</h3>
+            <p class="text-xs text-slate-500 mt-1">Are you sure you want to delete <span id="delete-complaint-title" class="font-bold text-slate-800">this complaint</span>? This action cannot be undone.</p>
+            <input type="hidden" id="delete-complaint-id">
+
+            <div class="flex items-center justify-center gap-2.5 mt-5">
+                <button type="button" onclick="closeModal('modal-delete-confirm')" class="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="btn-confirm-delete" onclick="handleConfirmDelete()" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 cursor-pointer">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Live Camera Capture -->
+    <div id="modal-camera" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-slate-900 text-white w-full max-w-md rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+            
+            <div class="px-5 py-3.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    <span class="text-xs font-bold tracking-wide uppercase text-slate-200">Live Camera</span>
+                </div>
+                <button type="button" onclick="closeLiveCamera()" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="relative bg-black flex items-center justify-center min-h-[300px] sm:min-h-[360px] overflow-hidden">
+                <video id="camera-video" autoplay playsinline class="w-full h-full object-cover max-h-[420px]"></video>
+                <canvas id="camera-canvas" class="hidden"></canvas>
+                <img id="camera-snapshot-preview" src="" alt="Snapshot" class="hidden w-full h-full object-cover absolute inset-0 z-10">
+
+                <div id="camera-hud-overlay" class="absolute inset-4 pointer-events-none border border-white/20 rounded-2xl flex flex-col justify-between p-3">
+                    <div class="flex justify-between text-white/50 text-[10px] font-mono">
+                        <span>CIVICFIX CAM</span>
+                        <span>HD 1080P</span>
+                    </div>
+                    <div class="self-center w-12 h-12 border border-white/30 rounded-full flex items-center justify-center">
+                        <div class="w-1 h-1 bg-white/60 rounded-full"></div>
+                    </div>
+                    <div class="flex justify-between text-white/50 text-[10px] font-mono">
+                        <span>GEO-TAG READY</span>
+                        <span id="camera-facing-label">FACING: BACK</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-900 border-t border-slate-800">
+                <div id="camera-live-controls" class="flex items-center justify-between px-4">
+                    <button type="button" onclick="toggleCameraFacing()" class="w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer transition-colors" title="Switch Camera">
+                        <span class="material-symbols-outlined text-xl">flip_camera_ios</span>
+                    </button>
+
+                    <button type="button" onclick="captureSnapshot()" class="relative group p-1 cursor-pointer">
+                        <div class="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center bg-white/10 group-hover:bg-white/20 transition-all">
+                            <div class="w-12 h-12 rounded-full bg-white group-active:scale-90 transition-transform"></div>
+                        </div>
+                    </button>
+
+                    <button type="button" onclick="triggerNativeMobileCamera()" class="w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer transition-colors" title="Native Camera App">
+                        <span class="material-symbols-outlined text-xl">photo_library</span>
+                    </button>
+                </div>
+
+                <div id="camera-review-controls" class="hidden flex items-center justify-between gap-3">
+                    <button type="button" onclick="retakeSnapshot()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                        <span>Retake</span>
+                    </button>
+                    <button type="button" onclick="confirmCapturedPhoto()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-lg shadow-emerald-600/30">
+                        <span class="material-symbols-outlined text-base">check</span>
+                        <span>Use This Photo</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Image Lightbox / Full Preview -->
+    <div id="modal-image-viewer" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="relative max-w-2xl w-full flex flex-col items-center">
+            <button type="button" onclick="closeModal('modal-image-viewer')" class="absolute -top-12 right-0 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer">
+                <span class="material-symbols-outlined text-xl">close</span>
+            </button>
+            <div class="bg-black rounded-3xl overflow-hidden border border-white/10 shadow-2xl max-h-[80vh] flex items-center justify-center">
+                <img id="image-viewer-src" src="" alt="Full Complaint Photo" class="max-w-full max-h-[75vh] object-contain">
+            </div>
+            <p id="image-viewer-title" class="text-xs text-slate-300 mt-3 text-center font-medium max-w-md truncate"></p>
+        </div>
+    </div>
+
+    <!-- Modal: Complaint Timeline -->
+    <div id="modal-timeline" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] flex flex-col transform transition-all">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-600">history</span>
+                    <h2 class="text-base font-bold text-slate-900">Complaint Progress Timeline</h2>
+                </div>
+                <button type="button" onclick="closeModal('modal-timeline')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- Complaint Summary Card in Timeline -->
+            <div id="timeline-complaint-summary" class="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3 shrink-0">
+                <!-- Dynamically filled -->
+            </div>
+
+    <!-- Modal: View Grievance on Interactive Map -->
+    <div id="modal-view-map" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[90vh] flex flex-col transform transition-all">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">pin_drop</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900" id="view-map-title">Grievance Map Location</h2>
+                        <p id="view-map-ref" class="text-xs text-slate-400 font-mono">#CF-0000</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-view-map')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- Location Meta Badge -->
+            <div class="my-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3 shrink-0">
+                <div class="min-w-0">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PINNED LOCATION</div>
+                    <div id="view-map-location-name" class="text-xs font-bold text-slate-900 truncate">Gandhipuram, Coimbatore</div>
+                    <div id="view-map-coords" class="text-[11px] font-mono text-blue-700 mt-0.5">11.016844° N, 76.955833° E</div>
+                </div>
+                <a id="view-map-gmaps-btn" href="#" target="_blank" rel="noopener noreferrer" 
+                    class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 shrink-0 transition-colors">
+                    <span class="material-symbols-outlined text-base">directions</span>
+                    <span>Open in Google Maps</span>
+                </a>
+            </div>
+
+            <!-- Map View Container -->
+            <div class="rounded-2xl border border-slate-200 overflow-hidden shadow-inner flex-1 min-h-[260px] max-h-[380px] relative">
+                <div id="view-complaint-map" class="w-full h-full min-h-[260px] bg-slate-100 z-10"></div>
+            </div>
+
+            <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+                <span class="flex items-center gap-1 text-[11px]">
+                    <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                    <span>GPS Pinned Coordinates</span>
+                </span>
+                <button type="button" onclick="closeModal('modal-view-map')" class="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let authToken = '';
+        let currentUser = null;
+        let allComplaints = [];
+        let filteredComplaints = [];
+        let activityList = [];
+        let currentTab = 'complaints';
+
+        // Photo State Management
+        let targetFormContext = 'new';
+        let newPhotoFile = null;
+        let editPhotoFile = null;
+        let editRemoveImageFlag = false;
+
+        let currentFacingMode = 'environment';
+        let cameraMediaStream = null;
+        let tempCapturedBlob = null;
+
+        let communityFeedList = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            authToken = localStorage.getItem('civicfix_token') || localStorage.getItem('token');
+            const userStr = localStorage.getItem('civicfix_user') || localStorage.getItem('user');
+
+            if (!authToken || !userStr) {
+                window.location.replace('/login.html');
+                return;
+            }
+
+            try {
+                currentUser = JSON.parse(userStr);
+                document.getElementById('welcome-name').textContent = currentUser.name || 'Citizen';
+                document.getElementById('citizen-name-display').textContent = currentUser.name || 'Citizen';
+                document.getElementById('citizen-phone-display').textContent = currentUser.phone ? `+91 ${currentUser.phone}` : (currentUser.email || '');
+            } catch (e) {
+                window.location.replace('/login.html');
+                return;
+            }
+
+            refreshAllData();
+        });
+
+        // Safe JSON response parser
+        async function parseSafeJson(res) {
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                return { message: text || `Server returned ${res.status}` };
+            }
+        }
+
+        async function fetchUserProfileAndPoints() {
+            try {
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (!res.ok) return;
+                const user = await parseSafeJson(res);
+                if (user && user.name) {
+                    currentUser = user;
+                    localStorage.setItem('civicfix_user', JSON.stringify(user));
+                    localStorage.setItem('user', JSON.stringify(user));
+                    document.getElementById('citizen-name-display').textContent = user.name;
+                    document.getElementById('welcome-name').textContent = user.name;
+                    const phoneEl = document.getElementById('citizen-phone-display');
+                    if (phoneEl) {
+                        phoneEl.textContent = user.phone ? `+91 ${user.phone}` : (user.email || '');
+                    }
+                }
+            } catch (e) {
+                console.error("User profile fetch error:", e);
+            }
+        }
+
+        async function refreshAllData() {
+            await Promise.all([fetchUserProfileAndPoints(), loadMyComplaints(), loadActivityStream()]);
+            updateDashboardMetrics();
+        }
+
+        // ==========================================
+        // 1. TABS NAVIGATION
+        // ==========================================
+        function switchMainTab(tab) {
+            currentTab = tab;
+            const btnComplaints = document.getElementById('tab-btn-complaints');
+            const btnCommunity = document.getElementById('tab-btn-community');
+            const btnActivity = document.getElementById('tab-btn-activity');
+
+            const secComplaints = document.getElementById('section-complaints');
+            const secCommunity = document.getElementById('section-community');
+            const secActivity = document.getElementById('section-activity');
+
+            const activeClass = 'px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-blue-600 text-white shadow-xs';
+            const inactiveClass = 'px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer';
+
+            if (btnComplaints) btnComplaints.className = tab === 'complaints' ? activeClass : inactiveClass;
+            if (btnCommunity) btnCommunity.className = tab === 'community' ? activeClass : inactiveClass;
+            if (btnActivity) btnActivity.className = tab === 'activity' ? activeClass : inactiveClass;
+
+            if (secComplaints) secComplaints.classList.toggle('hidden', tab !== 'complaints');
+            if (secCommunity) secCommunity.classList.toggle('hidden', tab !== 'community');
+            if (secActivity) secActivity.classList.toggle('hidden', tab !== 'activity');
+
+            if (tab === 'community') loadCommunityFeed();
+            if (tab === 'activity') loadActivityStream();
+        }
+
+        // ==========================================
+        // 2. FETCH COMPLAINTS, COMMUNITY & GAMIFICATION
+        // ==========================================
+        async function loadMyComplaints() {
+            const listEl = document.getElementById('complaints-list');
+            const emptyEl = document.getElementById('empty-complaints');
+
+            try {
+                const res = await fetch('/api/complaints/my', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (res.status === 401 || res.status === 403) {
+                    handleSignOut();
+                    return;
+                }
+
+                if (!res.ok) {
+                    const errData = await parseSafeJson(res);
+                    throw new Error(errData.message || 'Failed to load complaints.');
+                }
+
+                allComplaints = await parseSafeJson(res);
+                if (!Array.isArray(allComplaints)) allComplaints = [];
+
+                document.getElementById('tab-count-complaints').textContent = allComplaints.length;
+                applyFilters();
+
+            } catch (err) {
+                console.error(err);
+                showToast(err.message || 'Failed to load your complaints.', 'error');
+            }
+        }
+
+        // Community Feed ("Me Too" Upvoting)
+        async function loadCommunityFeed() {
+            const container = document.getElementById('community-feed-list');
+            const emptyEl = document.getElementById('empty-community');
+            
+            try {
+                const res = await fetch('/api/complaints/community/feed', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (!res.ok) throw new Error('Failed to load community feed.');
+                communityFeedList = await parseSafeJson(res);
+                if (!Array.isArray(communityFeedList)) communityFeedList = [];
+
+                applyCommunityFilters();
+            } catch (e) {
+                console.error("Community feed error:", e);
+                container.innerHTML = '<p class="text-xs text-rose-500 py-6 text-center">Failed to load community feed.</p>';
+            }
+        }
+
+        function applyCommunityFilters() {
+            const search = (document.getElementById('search-community').value || '').toLowerCase();
+            const category = document.getElementById('filter-community-category').value;
+            const container = document.getElementById('community-feed-list');
+            const emptyEl = document.getElementById('empty-community');
+
+            const filtered = communityFeedList.filter(c => {
+                const matchesSearch = !search || 
+                    (c.title || '').toLowerCase().includes(search) || 
+                    (c.location || '').toLowerCase().includes(search) || 
+                    (c.category || '').toLowerCase().includes(search) || 
+                    `#cf-${c.id}`.includes(search);
+                const matchesCategory = category === 'ALL' || c.category === category;
+                return matchesSearch && matchesCategory;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            emptyEl.classList.add('hidden');
+            container.innerHTML = filtered.map(c => {
+                const upvoteBtnClass = c.is_upvoted 
+                    ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100' 
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700';
+
+                return `
+                    <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+                        <div class="flex items-start gap-3 min-w-0 flex-1">
+                            ${c.image_path ? `
+                                <img src="${c.image_path}" onclick="openImageViewer('${c.image_path}', '${escapeHtml(c.title)}')" class="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0 cursor-pointer">
+                            ` : `
+                                <div class="w-16 h-16 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                                    <span class="material-symbols-outlined text-2xl">account_balance</span>
+                                </div>
+                            `}
+                            
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <h3 class="text-sm font-bold text-slate-900 leading-tight">${escapeHtml(c.title)}</h3>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'Resolved' ? 'bg-emerald-100 text-emerald-800' : (c.status === 'In Progress' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700')}">${escapeHtml(c.status)}</span>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 mt-1">
+                                    <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium text-[11px]">${escapeHtml(c.category)}</span>
+                                    <span class="flex items-center gap-0.5 text-slate-600 font-medium text-[11px]">
+                                        <span class="material-symbols-outlined text-xs text-blue-600">pin_drop</span>
+                                        <span>${escapeHtml(c.location || 'Coimbatore')}</span>
+                                    </span>
+                                    <span class="text-slate-400 font-mono text-[10px]">#CF-${String(c.id).padStart(4, '0')}</span>
+                                    <span class="text-blue-600 font-medium text-[11px]">By ${escapeHtml(c.citizen_name)}</span>
+                                </div>
+
+                                <p class="text-xs text-slate-600 mt-1 line-clamp-2">${escapeHtml(c.description)}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                            <span class="text-[11px] font-bold text-amber-700 sm:hidden">Priority: ${escapeHtml(c.priority)}</span>
+                            <button type="button" onclick="toggleUpvote(${c.id})" class="px-3.5 py-2 rounded-xl border ${upvoteBtnClass} text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all">
+                                <span class="material-symbols-outlined text-base text-amber-500">local_fire_department</span>
+                                <span>${c.is_upvoted ? 'Upvoted' : 'Me Too'} (${c.upvote_count || 0})</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function toggleUpvote(complaintId) {
+            try {
+                const res = await fetch(`/api/complaints/${complaintId}/upvote`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (!res.ok) throw new Error('Failed to toggle upvote.');
+                const data = await parseSafeJson(res);
+
+                showToast(data.message, data.upvoted ? 'success' : 'info');
+                fetchUserProfileAndPoints();
+                loadCommunityFeed();
+                loadMyComplaints();
+            } catch (e) {
+                showToast(e.message || 'Failed to process upvote.', 'error');
+            }
+        }
+
+        // BEFORE & AFTER PHOTO VERIFICATION HANDLERS
+        function openVerificationModal(complaintId) {
+            const comp = allComplaints.find(c => c.id === complaintId);
+            if (!comp) return;
+
+            document.getElementById('verify-complaint-id').value = comp.id;
+            document.getElementById('verify-modal-ref').textContent = `#CF-${String(comp.id).padStart(4, '0')}`;
+            document.getElementById('verify-title').textContent = comp.title || 'Civic Problem';
+            document.getElementById('verify-category').textContent = comp.category || 'Road Works';
+            document.getElementById('verify-location').textContent = comp.location || 'Coimbatore';
+            document.getElementById('verify-feedback-text').value = '';
+
+            const beforeImg = document.getElementById('verify-before-img');
+            const afterImg = document.getElementById('verify-after-img');
+
+            beforeImg.src = comp.image_path || '../uploads/sample_before.jpg';
+            afterImg.src = comp.resolved_image_path || '../uploads/sample_after.jpg';
+
+            setVerifyRating(5);
+            openModal('modal-verify-fix');
+        }
+
+        function setVerifyRating(val) {
+            document.getElementById('verify-rating-val').value = val;
+            const container = document.getElementById('star-rating-container');
+            const buttons = container.querySelectorAll('.star-btn');
+            buttons.forEach((btn, idx) => {
+                if (idx < val) {
+                    btn.className = 'star-btn text-2xl text-amber-400 cursor-pointer';
+                } else {
+                    btn.className = 'star-btn text-2xl text-slate-300 hover:text-amber-400 cursor-pointer';
+                }
+            });
+        }
+
+        async function handleVerifyFixAction(action) {
+            const id = document.getElementById('verify-complaint-id').value;
+            const rating = parseInt(document.getElementById('verify-rating-val').value) || 5;
+            const feedback = document.getElementById('verify-feedback-text').value.trim();
+
+            if (action === 'reject' && !feedback) {
+                showToast('Please enter a rejection reason describing why the fix is unsatisfactory.', 'error');
+                return;
+            }
+
+            const btnApprove = document.getElementById('btn-verify-approve');
+            const btnReject = document.getElementById('btn-verify-reject');
+
+            btnApprove.disabled = true;
+            btnReject.disabled = true;
+
+            try {
+                const res = await fetch(`/api/complaints/${id}/verify-fix`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        action,
+                        reason: feedback,
+                        rating,
+                        feedback
+                    })
+                });
+
+                const data = await parseSafeJson(res);
+                if (!res.ok) throw new Error(data.message || 'Failed to submit verification.');
+
+                showToast(data.message, action === 'approve' ? 'success' : 'warning');
+                closeModal('modal-verify-fix');
+                refreshAllData();
+
+            } catch (e) {
+                showToast(e.message || 'Verification submission failed.', 'error');
+            } finally {
+                btnApprove.disabled = false;
+                btnReject.disabled = false;
+            }
+        }
+
+        async function loadActivityStream() {
+            const streamEl = document.getElementById('activity-stream-list');
+            const emptyEl = document.getElementById('empty-activity');
+
+            try {
+                const res = await fetch('/api/complaints/my/activity', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (!res.ok) return;
+
+                activityList = await parseSafeJson(res);
+                if (!Array.isArray(activityList)) activityList = [];
+
+                document.getElementById('tab-count-activity').textContent = activityList.length;
+
+                if (activityList.length === 0) {
+                    streamEl.innerHTML = '';
+                    emptyEl.classList.remove('hidden');
+                    return;
+                }
+
+                emptyEl.classList.add('hidden');
+                streamEl.innerHTML = activityList.map(a => {
+                    let icon = 'notifications';
+                    let iconColor = 'bg-blue-50 text-blue-600';
+
+                    if (a.status === 'Resolved') {
+                        icon = 'check_circle';
+                        iconColor = 'bg-emerald-50 text-emerald-600';
+                    } else if (a.status === 'In Progress') {
+                        icon = 'engineering';
+                        iconColor = 'bg-indigo-50 text-indigo-600';
+                    } else if (a.message && a.message.includes('edited')) {
+                        icon = 'edit';
+                        iconColor = 'bg-amber-50 text-amber-600';
+                    }
+
+                    return `
+                        <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-start gap-3 text-xs">
+                            <div class="w-8 h-8 rounded-xl ${iconColor} flex items-center justify-center shrink-0">
+                                <span class="material-symbols-outlined text-base">${icon}</span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="font-bold text-slate-900 truncate">${escapeHtml(a.complaint_title)}</div>
+                                    <span class="text-[10px] text-slate-400 font-medium shrink-0">${timeAgo(a.created_at)}</span>
+                                </div>
+                                <p class="text-slate-600 mt-0.5">${escapeHtml(a.message || 'Status updated.')}</p>
+                                <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-1 font-mono">
+                                    <span>#CF-${String(a.complaint_id).padStart(4, '0')}</span>
+                                    <span>•</span>
+                                    <span>${escapeHtml(a.complaint_category || 'Civic Issue')}</span>
+                                    ${a.staff_name ? `<span>• By: <span class="text-blue-600 font-sans font-semibold">${escapeHtml(a.staff_name)}</span></span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (e) {
+                console.error('Activity stream error:', e);
+            }
+        }
+
+        function updateDashboardMetrics() {
+            const total = allComplaints.length;
+            const inProgress = allComplaints.filter(c => c.status === 'In Progress').length;
+            const resolved = allComplaints.filter(c => c.status === 'Resolved').length;
+            const rate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-progress').textContent = inProgress;
+            document.getElementById('stat-resolved').textContent = resolved;
+            document.getElementById('stat-rate').textContent = `${rate}%`;
+            document.getElementById('stat-rate-bar').style.width = `${rate}%`;
+        }
+
+        // ==========================================
+        // 3. MAP PINNING & GOOGLE MAPS ENGINE
+        // ==========================================
+        let mapNewInstance = null;
+        let markerNewInstance = null;
+        let mapEditInstance = null;
+        let markerEditInstance = null;
+        let mapViewInstance = null;
+        let markerViewInstance = null;
+
+        const DEFAULT_COIMBATORE_COORDS = [11.016844, 76.955833];
+
+        function createPinIcon(color = '#2563eb') {
+            return L.divIcon({
+                className: 'custom-civic-pin',
+                html: `
+                    <div style="background-color: ${color}; color: white; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(0,0,0,0.25); border: 2.5px solid white;">
+                        <span class="material-symbols-outlined" style="transform: rotate(45deg); font-size: 18px; line-height: 1;">location_on</span>
+                    </div>
+                `,
+                iconSize: [34, 34],
+                iconAnchor: [17, 34],
+                popupAnchor: [0, -34]
+            });
+        }
+
+        function initNewComplaintMap(initialLat = 11.016844, initialLng = 76.955833) {
+            setTimeout(() => {
+                const mapEl = document.getElementById('new-comp-map');
+                if (!mapEl) return;
+
+                if (mapNewInstance) {
+                    mapNewInstance.remove();
+                    mapNewInstance = null;
+                }
+
+                mapNewInstance = L.map('new-comp-map', {
+                    zoomControl: true,
+                    attributionControl: false
+                }).setView([initialLat, initialLng], 14);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19
+                }).addTo(mapNewInstance);
+
+                markerNewInstance = L.marker([initialLat, initialLng], {
+                    draggable: true,
+                    icon: createPinIcon('#2563eb')
+                }).addTo(mapNewInstance);
+
+                markerNewInstance.bindPopup('<b>📍 Grievance Pinpoint</b><br>Drag or click map to move').openPopup();
+
+                markerNewInstance.on('dragend', (e) => {
+                    const pos = e.target.getLatLng();
+                    updateMapLocation('new', pos.lat, pos.lng);
+                });
+
+                mapNewInstance.on('click', (e) => {
+                    const pos = e.latlng;
+                    markerNewInstance.setLatLng(pos);
+                    updateMapLocation('new', pos.lat, pos.lng);
+                });
+
+                mapNewInstance.invalidateSize();
+                updateMapLocation('new', initialLat, initialLng, false);
+            }, 250);
+        }
+
+        function initEditComplaintMap(initialLat = 11.016844, initialLng = 76.955833) {
+            setTimeout(() => {
+                const mapEl = document.getElementById('edit-comp-map');
+                if (!mapEl) return;
+
+                if (mapEditInstance) {
+                    mapEditInstance.remove();
+                    mapEditInstance = null;
+                }
+
+                mapEditInstance = L.map('edit-comp-map', {
+                    zoomControl: true,
+                    attributionControl: false
+                }).setView([initialLat, initialLng], 14);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19
+                }).addTo(mapEditInstance);
+
+                markerEditInstance = L.marker([initialLat, initialLng], {
+                    draggable: true,
+                    icon: createPinIcon('#4f46e5')
+                }).addTo(mapEditInstance);
+
+                markerEditInstance.bindPopup('<b>📍 Grievance Pinpoint</b><br>Drag or click map to move').openPopup();
+
+                markerEditInstance.on('dragend', (e) => {
+                    const pos = e.target.getLatLng();
+                    updateMapLocation('edit', pos.lat, pos.lng);
+                });
+
+                mapEditInstance.on('click', (e) => {
+                    const pos = e.latlng;
+                    markerEditInstance.setLatLng(pos);
+                    updateMapLocation('edit', pos.lat, pos.lng);
+                });
+
+                mapEditInstance.invalidateSize();
+                updateMapLocation('edit', initialLat, initialLng, false);
+            }, 250);
+        }
+
+        function openViewComplaintMap(id) {
+            const comp = allComplaints.find(c => c.id === id);
+            if (!comp) return;
+
+            const lat = parseFloat(comp.latitude) || 11.016844;
+            const lng = parseFloat(comp.longitude) || 76.955833;
+            const refCode = `#CF-${String(comp.id).padStart(4, '0')}`;
+
+            document.getElementById('view-map-title').textContent = comp.title || 'Grievance Pin';
+            document.getElementById('view-map-ref').textContent = `${refCode} • ${comp.category || 'Civic Issue'}`;
+            document.getElementById('view-map-location-name').textContent = comp.location || comp.formatted_address || 'Coimbatore';
+            document.getElementById('view-map-coords').textContent = `${lat.toFixed(6)}° N, ${lng.toFixed(6)}° E`;
+
+            const gmapsBtn = document.getElementById('view-map-gmaps-btn');
+            gmapsBtn.href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+            openModal('modal-view-map');
+
+            setTimeout(() => {
+                const mapEl = document.getElementById('view-complaint-map');
+                if (!mapEl) return;
+
+                if (mapViewInstance) {
+                    mapViewInstance.remove();
+                    mapViewInstance = null;
+                }
+
+                mapViewInstance = L.map('view-complaint-map', {
+                    zoomControl: true,
+                    attributionControl: false
+                }).setView([lat, lng], 15);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19
+                }).addTo(mapViewInstance);
+
+                markerViewInstance = L.marker([lat, lng], {
+                    icon: createPinIcon('#dc2626')
+                }).addTo(mapViewInstance);
+
+                markerViewInstance.bindPopup(`
+                    <div style="font-size: 12px;">
+                        <b>${escapeHtml(comp.title)}</b><br>
+                        <span style="color: #64748b;">${escapeHtml(comp.location || 'Coimbatore')}</span><br>
+                        <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lng}" target="_blank" style="color: #2563eb; font-weight: bold; text-decoration: underline; margin-top: 4px; display: inline-block;">Directions in Google Maps &rarr;</a>
+                    </div>
+                `).openPopup();
+
+                mapViewInstance.invalidateSize();
+            }, 250);
+        }
+
+        function updateMapLocation(context, lat, lng, autoFillText = true) {
+            const roundedLat = parseFloat(lat).toFixed(6);
+            const roundedLng = parseFloat(lng).toFixed(6);
+
+            const latInput = document.getElementById(`${context === 'new' ? 'comp' : 'edit'}-latitude`);
+            const lngInput = document.getElementById(`${context === 'new' ? 'comp' : 'edit'}-longitude`);
+            const coordsDisplay = document.getElementById(`${context}-comp-coords-display`);
+            const gmapsLink = document.getElementById(`${context}-comp-gmaps-link`);
+            const locationInput = document.getElementById(`${context === 'new' ? 'comp' : 'edit'}-location`);
+
+            if (latInput) latInput.value = roundedLat;
+            if (lngInput) lngInput.value = roundedLng;
+            if (coordsDisplay) {
+                coordsDisplay.innerHTML = `<span class="material-symbols-outlined text-xs text-blue-600">location_on</span><span>${roundedLat}, ${roundedLng}</span>`;
+            }
+            if (gmapsLink) {
+                gmapsLink.href = `https://www.google.com/maps/search/?api=1&query=${roundedLat},${roundedLng}`;
+            }
+
+            if (autoFillText && locationInput && !locationInput.value.trim()) {
+                locationInput.value = `Coimbatore Pin (${roundedLat}, ${roundedLng})`;
+            }
+        }
+
+        function panMapToArea(context, lat, lng, areaName) {
+            const mapInstance = context === 'new' ? mapNewInstance : mapEditInstance;
+            const markerInstance = context === 'new' ? markerNewInstance : markerEditInstance;
+            const locationInput = document.getElementById(`${context === 'new' ? 'comp' : 'edit'}-location`);
+
+            if (mapInstance && markerInstance) {
+                mapInstance.setView([lat, lng], 15);
+                markerInstance.setLatLng([lat, lng]);
+                updateMapLocation(context, lat, lng, false);
+                if (locationInput) {
+                    locationInput.value = areaName;
+                }
+                showToast(`Pinned location centered on ${areaName}`, 'info');
+            }
+        }
+
+        function detectUserGpsLocation(context) {
+            if (!navigator.geolocation) {
+                showToast('Geolocation is not supported by your browser.', 'error');
+                return;
+            }
+
+            showToast('Fetching GPS coordinates from device...', 'info');
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const mapInstance = context === 'new' ? mapNewInstance : mapEditInstance;
+                    const markerInstance = context === 'new' ? markerNewInstance : markerEditInstance;
+                    const locationInput = document.getElementById(`${context === 'new' ? 'comp' : 'edit'}-location`);
+
+                    if (mapInstance && markerInstance) {
+                        mapInstance.setView([lat, lng], 16);
+                        markerInstance.setLatLng([lat, lng]);
+                        updateMapLocation(context, lat, lng, false);
+                        if (locationInput && (!locationInput.value || locationInput.value.includes('Coimbatore Pin'))) {
+                            locationInput.value = `GPS Pin: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+                        }
+                    }
+
+                    showToast('GPS Location successfully pinned!', 'success');
+                },
+                (err) => {
+                    console.warn('GPS location error:', err);
+                    showToast('Could not fetch exact GPS location. Defaulting to Coimbatore central.', 'warning');
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        // ==========================================
+        // 4. SEARCH & FILTERING
+        // ==========================================
+        function applyFilters() {
+            const query = (document.getElementById('search-complaints').value || '').toLowerCase().trim();
+            const cat = document.getElementById('filter-category').value;
+            const status = document.getElementById('filter-status').value;
+
+            filteredComplaints = allComplaints.filter(c => {
+                const matchCat = (cat === 'ALL' || c.category === cat);
+                const matchStatus = (status === 'ALL' || c.status === status);
+                const idStr = `#cf-${String(c.id).padStart(4, '0')}`.toLowerCase();
+                const matchQuery = !query || 
+                    (c.title && c.title.toLowerCase().includes(query)) ||
+                    (c.location && c.location.toLowerCase().includes(query)) ||
+                    (c.description && c.description.toLowerCase().includes(query)) ||
+                    idStr.includes(query);
+
+                return matchCat && matchStatus && matchQuery;
+            });
+
+            renderComplaints();
+        }
+
+        function renderComplaints() {
+            const listEl = document.getElementById('complaints-list');
+            const emptyEl = document.getElementById('empty-complaints');
+
+            if (!filteredComplaints || filteredComplaints.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            emptyEl.classList.add('hidden');
+            listEl.innerHTML = filteredComplaints.map(c => {
+                let statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">Received</span>`;
+                if (c.status === 'In Progress') {
+                    statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">In Progress</span>`;
+                } else if (c.status === 'Resolved') {
+                    statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Resolved</span>`;
+                }
+
+                const lat = parseFloat(c.latitude) || 11.016844;
+                const lng = parseFloat(c.longitude) || 76.955833;
+                const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+                // Image comparison preview for resolved complaints
+                let imageThumbnailHtml = '';
+                if (c.status === 'Resolved' && c.resolved_image_path) {
+                    imageThumbnailHtml = `
+                        <div class="flex items-center gap-1 shrink-0 cursor-pointer" onclick="openImageViewerById(${c.id})" title="Before & After Photos">
+                            <div class="relative w-14 h-16 sm:w-16 sm:h-20 rounded-xl overflow-hidden bg-slate-900 border border-slate-300">
+                                <img src="${c.image_path || '../uploads/sample_before.jpg'}" class="w-full h-full object-cover">
+                                <span class="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] font-bold text-center py-0.5">BEFORE</span>
+                            </div>
+                            <div class="relative w-14 h-16 sm:w-16 sm:h-20 rounded-xl overflow-hidden bg-emerald-900 border border-emerald-400 shadow-xs">
+                                <img src="${c.resolved_image_path}" class="w-full h-full object-cover">
+                                <span class="absolute bottom-0 inset-x-0 bg-emerald-700 text-white text-[8px] font-extrabold text-center py-0.5">AFTER</span>
+                            </div>
+                        </div>
+                    `;
+                } else if (c.image_path) {
+                    imageThumbnailHtml = `
+                        <div class="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 shrink-0 group cursor-pointer" onclick="openImageViewerById(${c.id})">
+                            <img src="${c.image_path}" alt="Issue Photo" class="w-full h-full object-cover group-hover:scale-105 transition-transform" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-slate-100 text-slate-400\\'><span class=\\'material-symbols-outlined text-2xl\\'>image_not_supported</span></div>'">
+                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                <span class="material-symbols-outlined text-lg">zoom_in</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    imageThumbnailHtml = `
+                        <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-blue-50/80 border border-blue-100 flex flex-col items-center justify-center text-blue-600 shrink-0 p-2 text-center">
+                            <span class="material-symbols-outlined text-2xl">report_problem</span>
+                            <span class="text-[9px] uppercase font-bold tracking-wider mt-0.5 text-blue-700">${escapeHtml(c.category || 'Issue')}</span>
+                        </div>
+                    `;
+                }
+
+                // Verification status pill
+                let verificationBarHtml = '';
+                if (c.status === 'Resolved') {
+                    if (c.verification_status === 'approved') {
+                        verificationBarHtml = `
+                            <span class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                                <span>Verified & Closed by Admin</span>
+                            </span>
+                        `;
+                    } else if (c.verification_status === 'rejected') {
+                        verificationBarHtml = `
+                            <span class="px-2.5 py-1 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 text-[11px] font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-rose-600">published_with_changes</span>
+                                <span>Reopened by Admin</span>
+                            </span>
+                        `;
+                    } else {
+                        verificationBarHtml = `
+                            <span class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
+                                <span>Resolved (Awaiting Admin Audit)</span>
+                            </span>
+                        `;
+                    }
+                }
+
+                return `
+                    <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+                        <div class="flex items-start gap-3 min-w-0 flex-1">
+                            ${imageThumbnailHtml}
+                            
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <h3 class="text-sm font-bold text-slate-900 leading-tight">${escapeHtml(c.title)}</h3>
+                                    <div class="shrink-0 sm:hidden flex items-center gap-1">
+                                        ${statusBadge}
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 mt-1">
+                                    <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium text-[11px]">${escapeHtml(c.category)}</span>
+                                    <span class="flex items-center gap-0.5 text-slate-600 font-medium text-[11px]">
+                                        <span class="material-symbols-outlined text-xs text-blue-600">pin_drop</span>
+                                        <span class="truncate max-w-[130px] sm:max-w-none">${escapeHtml(c.location || 'Coimbatore')}</span>
+                                    </span>
+                                    <span class="text-slate-400 font-mono text-[10px]">#CF-${String(c.id).padStart(4, '0')}</span>
+                                    <span class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-bold text-[10px] flex items-center gap-0.5 border border-amber-200">
+                                        <span class="material-symbols-outlined text-xs text-amber-500">local_fire_department</span>
+                                        <span>${c.upvote_count || 0} Upvotes</span>
+                                    </span>
+                                </div>
+
+                                <p class="text-xs text-slate-600 mt-1.5 line-clamp-2">${escapeHtml(c.description)}</p>
+
+                                <!-- Pinned Google Maps Actions Bar -->
+                                <div class="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-100 text-xs">
+                                    <div class="flex items-center gap-1.5">
+                                        <button type="button" onclick="openViewComplaintMap(${c.id})" 
+                                            class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors">
+                                            <span class="material-symbols-outlined text-xs">map</span>
+                                            <span>View Pinned Map</span>
+                                        </button>
+                                        <a href="${gmapsUrl}" target="_blank" rel="noopener noreferrer"
+                                            class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors">
+                                            <span class="material-symbols-outlined text-xs text-rose-500">open_in_new</span>
+                                            <span>Google Maps</span>
+                                        </a>
+                                    </div>
+                                    ${verificationBarHtml}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                            <div class="hidden sm:block">${statusBadge}</div>
+                            
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="viewTimeline(${c.id})" class="px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-colors" title="Track Timeline">
+                                    <span class="material-symbols-outlined text-sm text-blue-600">history</span>
+                                    <span>Track</span>
+                                </button>
+                                
+                                <button type="button" onclick="openEditComplaintModal(${c.id})" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-slate-600 flex items-center justify-center cursor-pointer transition-colors" title="Edit Complaint">
+                                    <span class="material-symbols-outlined text-base">edit</span>
+                                </button>
+
+                                <button type="button" onclick="openDeleteConfirmModal(${c.id})" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-400 flex items-center justify-center cursor-pointer transition-colors" title="Delete Complaint">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ==========================================
+        // 5. CREATE COMPLAINT
+        // ==========================================
+        function openNewComplaintModal() {
+            document.getElementById('form-new-complaint').reset();
+            removeSelectedPhoto('new');
+            openModal('modal-new-complaint');
+            initNewComplaintMap(11.016844, 76.955833);
+        }
+
+        async function handleCreateComplaint(e) {
+            e.preventDefault();
+            const title = document.getElementById('comp-title').value.trim();
+            const category = document.getElementById('comp-category').value;
+            const priority = document.getElementById('comp-priority').value;
+            const location = document.getElementById('comp-location').value.trim();
+            const description = document.getElementById('comp-description').value.trim();
+            const latitude = document.getElementById('comp-latitude').value;
+            const longitude = document.getElementById('comp-longitude').value;
+            const formatted_address = document.getElementById('comp-formatted-address').value;
+            const place_name = document.getElementById('comp-place-name').value;
+            const btn = document.getElementById('btn-submit-complaint');
+
+            if (!title || !category || !description) {
+                showToast('Please fill in all required fields.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('category', category);
+            formData.append('priority', priority);
+            formData.append('location', location);
+            formData.append('description', description);
+            if (latitude) formData.append('latitude', latitude);
+            if (longitude) formData.append('longitude', longitude);
+            if (formatted_address) formData.append('formatted_address', formatted_address);
+            if (place_name) formData.append('place_name', place_name);
+
+            if (newPhotoFile) {
+                formData.append('image', newPhotoFile);
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Submitting Grievance...</span>
+            `;
+
+            try {
+                const res = await fetch('/api/complaints', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: formData
+                });
+
+                const data = await parseSafeJson(res);
+                if (!res.ok) throw new Error(data.message || 'Failed to submit complaint.');
+
+                showToast('Complaint registered with map location!', 'success');
+                closeModal('modal-new-complaint');
+                removeSelectedPhoto('new');
+                refreshAllData();
+
+            } catch (err) {
+                showToast(err.message || 'Failed to submit complaint.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-outlined text-lg">send</span><span>Submit Complaint</span>';
+            }
+        }
+
+        // ==========================================
+        // 6. EDIT COMPLAINT
+        // ==========================================
+        function openEditComplaintModal(id) {
+            const comp = allComplaints.find(c => c.id === id);
+            if (!comp) return;
+
+            document.getElementById('edit-complaint-id').value = comp.id;
+            document.getElementById('edit-ref-id').textContent = `#CF-${String(comp.id).padStart(4, '0')}`;
+            document.getElementById('edit-title').value = comp.title || '';
+            document.getElementById('edit-category').value = comp.category || 'Road Works';
+            document.getElementById('edit-priority').value = comp.priority || 'Medium';
+            document.getElementById('edit-location').value = comp.location || '';
+            document.getElementById('edit-description').value = comp.description || '';
+
+            const initialLat = parseFloat(comp.latitude) || 11.016844;
+            const initialLng = parseFloat(comp.longitude) || 76.955833;
+
+            document.getElementById('edit-latitude').value = initialLat;
+            document.getElementById('edit-longitude').value = initialLng;
+            document.getElementById('edit-formatted-address').value = comp.formatted_address || comp.location || '';
+            document.getElementById('edit-place-name').value = comp.place_name || '';
+
+            editPhotoFile = null;
+            editRemoveImageFlag = false;
+
+            const previewImg = document.getElementById('edit-photo-preview-img');
+            const nameEl = document.getElementById('edit-photo-name');
+            const badgeEl = document.getElementById('edit-photo-status-badge');
+
+            if (comp.image_path) {
+                previewImg.src = comp.image_path;
+                nameEl.textContent = 'Existing attached photo';
+                badgeEl.textContent = 'Current Photo';
+                badgeEl.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200';
+                document.getElementById('edit-photo-container').classList.remove('hidden');
+            } else {
+                previewImg.src = '';
+                nameEl.textContent = 'No photo attached';
+                badgeEl.textContent = 'No Photo';
+                badgeEl.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200';
+            }
+
+            openModal('modal-edit-complaint');
+            initEditComplaintMap(initialLat, initialLng);
+        }
+
+        async function handleUpdateComplaint(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-complaint-id').value;
+            const title = document.getElementById('edit-title').value.trim();
+            const category = document.getElementById('edit-category').value;
+            const priority = document.getElementById('edit-priority').value;
+            const location = document.getElementById('edit-location').value.trim();
+            const description = document.getElementById('edit-description').value.trim();
+            const latitude = document.getElementById('edit-latitude').value;
+            const longitude = document.getElementById('edit-longitude').value;
+            const formatted_address = document.getElementById('edit-formatted-address').value;
+            const place_name = document.getElementById('edit-place-name').value;
+            const btn = document.getElementById('btn-save-edit');
+
+            if (!title || !category || !description) {
+                showToast('Please fill in all required fields.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('category', category);
+            formData.append('priority', priority);
+            formData.append('location', location);
+            formData.append('description', description);
+            if (latitude) formData.append('latitude', latitude);
+            if (longitude) formData.append('longitude', longitude);
+            if (formatted_address) formData.append('formatted_address', formatted_address);
+            if (place_name) formData.append('place_name', place_name);
+
+            if (editPhotoFile) {
+                formData.append('image', editPhotoFile);
+            } else if (editRemoveImageFlag) {
+                formData.append('remove_image', 'true');
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = 'Saving Changes...';
+
+            try {
+                const res = await fetch(`/api/complaints/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: formData
+                });
+
+                const data = await parseSafeJson(res);
+                if (!res.ok) throw new Error(data.message || 'Failed to update complaint.');
+
+                showToast('Complaint location and details updated!', 'success');
+                closeModal('modal-edit-complaint');
+                refreshAllData();
+
+            } catch (err) {
+                showToast(err.message || 'Failed to update complaint.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-outlined text-lg">save</span><span>Save Changes</span>';
+            }
+        }
+
+        // ==========================================
+        // 6. DELETE COMPLAINT
+        // ==========================================
+        function openDeleteConfirmModal(id) {
+            const comp = allComplaints.find(c => c.id === id);
+            const title = comp ? comp.title : 'this complaint';
+            document.getElementById('delete-complaint-id').value = id;
+            document.getElementById('delete-complaint-title').textContent = `"${title}" (#CF-${String(id).padStart(4, '0')})`;
+            openModal('modal-delete-confirm');
+        }
+
+        async function handleConfirmDelete() {
+            const id = document.getElementById('delete-complaint-id').value;
+            const btn = document.getElementById('btn-confirm-delete');
+
+            btn.disabled = true;
+            btn.textContent = 'Deleting...';
+
+            try {
+                const res = await fetch(`/api/complaints/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await parseSafeJson(res);
+                if (!res.ok) throw new Error(data.message || 'Failed to delete complaint.');
+
+                showToast('Complaint deleted successfully.', 'success');
+                closeModal('modal-delete-confirm');
+                closeModal('modal-timeline');
+                refreshAllData();
+
+            } catch (err) {
+                showToast(err.message || 'Failed to delete complaint.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Delete';
+            }
+        }
+
+        // ==========================================
+        // 7. PHOTO SELECTION & LIVE CAMERA
+        // ==========================================
+        function handleFileChosen(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showToast('Please select a valid image file (JPG, PNG, WEBP).', 'error');
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('Image size exceeds 5 MB limit. Please choose a smaller photo.', 'error');
+                return;
+            }
+
+            setSelectedPhoto(file, 'Uploaded Image', 'new');
+        }
+
+        function handleEditFileChosen(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showToast('Please select a valid image file (JPG, PNG, WEBP).', 'error');
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('Image size exceeds 5 MB limit.', 'error');
+                return;
+            }
+
+            setSelectedPhoto(file, 'New Upload', 'edit');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('border-blue-500', 'bg-blue-50/50');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50/50');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50/50');
+
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                const file = files[0];
+                if (!file.type.startsWith('image/')) {
+                    showToast('Only image files (JPG, PNG, WEBP) are supported.', 'error');
+                    return;
+                }
+                setSelectedPhoto(file, 'Uploaded Image', 'new');
+            }
+        }
+
+        function setSelectedPhoto(file, sourceLabel, context = 'new') {
+            const url = URL.createObjectURL(file);
+
+            if (context === 'new') {
+                newPhotoFile = file;
+                const pickerContainer = document.getElementById('photo-picker-container');
+                const previewContainer = document.getElementById('photo-preview-container');
+                const previewImg = document.getElementById('photo-preview-img');
+                const filenameEl = document.getElementById('photo-filename');
+                const filesizeEl = document.getElementById('photo-filesize');
+                const badgeEl = document.getElementById('photo-source-badge');
+
+                previewImg.src = url;
+                filenameEl.textContent = file.name || 'captured_photo.jpg';
+                filesizeEl.textContent = formatBytes(file.size);
+                badgeEl.innerHTML = `<span class="material-symbols-outlined text-xs">check_circle</span><span>${sourceLabel || 'Photo Attached'}</span>`;
+
+                pickerContainer.classList.add('hidden');
+                previewContainer.classList.remove('hidden');
+            } else {
+                editPhotoFile = file;
+                editRemoveImageFlag = false;
+                const previewImg = document.getElementById('edit-photo-preview-img');
+                const nameEl = document.getElementById('edit-photo-name');
+                const badgeEl = document.getElementById('edit-photo-status-badge');
+
+                previewImg.src = url;
+                nameEl.textContent = `${file.name || 'new_photo.jpg'} (${formatBytes(file.size)})`;
+                badgeEl.textContent = sourceLabel || 'New Photo';
+                badgeEl.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
+            }
+        }
+
+        function removeSelectedPhoto(context = 'new') {
+            if (context === 'new') {
+                newPhotoFile = null;
+                document.getElementById('comp-file-input').value = '';
+                document.getElementById('comp-camera-input').value = '';
+                document.getElementById('photo-picker-container').classList.remove('hidden');
+                document.getElementById('photo-preview-container').classList.add('hidden');
+                document.getElementById('photo-preview-img').src = '';
+            }
+        }
+
+        function viewAttachedPhotoPreview(context = 'new') {
+            const previewImg = context === 'new'
+                ? document.getElementById('photo-preview-img')
+                : document.getElementById('edit-photo-preview-img');
+
+            if (previewImg && previewImg.src) {
+                openImageViewer(previewImg.src, 'Evidence Photo Preview');
+            }
+        }
+
+        // Live Camera Functions
+        async function openLiveCamera(context = 'new') {
+            targetFormContext = context;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                triggerNativeMobileCamera();
+                return;
+            }
+
+            openModal('modal-camera');
+            document.getElementById('camera-live-controls').classList.remove('hidden');
+            document.getElementById('camera-review-controls').classList.add('hidden');
+            document.getElementById('camera-snapshot-preview').classList.add('hidden');
+            document.getElementById('camera-video').classList.remove('hidden');
+            document.getElementById('camera-hud-overlay').classList.remove('hidden');
+
+            await startCameraStream();
+        }
+
+        async function startCameraStream() {
+            stopCameraStream();
+
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: currentFacingMode,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+
+                cameraMediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                const videoEl = document.getElementById('camera-video');
+                videoEl.srcObject = cameraMediaStream;
+                await videoEl.play();
+
+                document.getElementById('camera-facing-label').textContent = `FACING: ${currentFacingMode === 'environment' ? 'BACK' : 'FRONT'}`;
+            } catch (err) {
+                console.warn('Camera stream error:', err);
+                closeLiveCamera();
+                showToast('Unable to access webcam. Opening file selector...', 'warning');
+                if (targetFormContext === 'new') {
+                    document.getElementById('comp-file-input').click();
+                } else {
+                    document.getElementById('edit-file-input').click();
+                }
+            }
+        }
+
+        function stopCameraStream() {
+            if (cameraMediaStream) {
+                cameraMediaStream.getTracks().forEach(track => track.stop());
+                cameraMediaStream = null;
+            }
+        }
+
+        function closeLiveCamera() {
+            stopCameraStream();
+            closeModal('modal-camera');
+        }
+
+        async function toggleCameraFacing() {
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            await startCameraStream();
+        }
+
+        function triggerNativeMobileCamera() {
+            closeLiveCamera();
+            if (targetFormContext === 'new') {
+                document.getElementById('comp-camera-input').click();
+            } else {
+                document.getElementById('edit-camera-input').click();
+            }
+        }
+
+        function captureSnapshot() {
+            const videoEl = document.getElementById('camera-video');
+            const canvasEl = document.getElementById('camera-canvas');
+            const previewImg = document.getElementById('camera-snapshot-preview');
+
+            if (!videoEl || !videoEl.videoWidth) {
+                showToast('Camera feed not ready yet.', 'error');
+                return;
+            }
+
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+
+            const ctx = canvasEl.getContext('2d');
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+
+            canvasEl.toBlob((blob) => {
+                if (!blob) {
+                    showToast('Failed to capture photo.', 'error');
+                    return;
+                }
+
+                tempCapturedBlob = blob;
+                previewImg.src = URL.createObjectURL(blob);
+
+                document.getElementById('camera-video').classList.add('hidden');
+                document.getElementById('camera-hud-overlay').classList.add('hidden');
+                previewImg.classList.remove('hidden');
+
+                document.getElementById('camera-live-controls').classList.add('hidden');
+                document.getElementById('camera-review-controls').classList.remove('hidden');
+            }, 'image/jpeg', 0.92);
+        }
+
+        async function retakeSnapshot() {
+            document.getElementById('camera-snapshot-preview').classList.add('hidden');
+            document.getElementById('camera-video').classList.remove('hidden');
+            document.getElementById('camera-hud-overlay').classList.remove('hidden');
+            document.getElementById('camera-live-controls').classList.remove('hidden');
+            document.getElementById('camera-review-controls').classList.add('hidden');
+            tempCapturedBlob = null;
+        }
+
+        function confirmCapturedPhoto() {
+            if (!tempCapturedBlob) return;
+
+            const filename = `civic_issue_cam_${Date.now()}.jpg`;
+            const file = new File([tempCapturedBlob], filename, { type: 'image/jpeg' });
+            
+            setSelectedPhoto(file, 'Camera Capture', targetFormContext);
+            closeLiveCamera();
+        }
+
+        function openImageViewerById(id) {
+            const comp = allComplaints.find(c => c.id === id);
+            if (comp && comp.image_path) {
+                openImageViewer(comp.image_path, comp.title);
+            }
+        }
+
+        function openImageViewer(src, title) {
+            document.getElementById('image-viewer-src').src = src;
+            document.getElementById('image-viewer-title').textContent = title || 'Evidence Photo';
+            openModal('modal-image-viewer');
+        }
+
+        // ==========================================
+        // 8. PROGRESS TIMELINE
+        // ==========================================
+        async function viewTimeline(complaintId) {
+            openModal('modal-timeline');
+            const summaryContainer = document.getElementById('timeline-complaint-summary');
+            const container = document.getElementById('timeline-container');
+            
+            summaryContainer.innerHTML = '';
+            container.innerHTML = '<p class="text-xs text-slate-400 py-6 text-center">Loading progress...</p>';
+
+            const comp = allComplaints.find(c => c.id === complaintId);
+            if (comp) {
+                const imgHtml = comp.image_path ? `
+                    <img src="${comp.image_path}" class="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0 cursor-pointer" onclick="openImageViewerById(${comp.id})">
+                ` : `
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-xl">account_balance</span>
+                    </div>
+                `;
+
+                summaryContainer.innerHTML = `
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                        ${imgHtml}
+                        <div class="min-w-0 flex-1 text-xs">
+                            <div class="font-bold text-slate-900 truncate">${escapeHtml(comp.title)}</div>
+                            <div class="text-[11px] text-slate-500">${escapeHtml(comp.category)} • ${escapeHtml(comp.location || 'Coimbatore')}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button type="button" onclick="closeModal('modal-timeline'); openEditComplaintModal(${comp.id})" class="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer" title="Edit">
+                            <span class="material-symbols-outlined text-base">edit</span>
+                        </button>
+                        <button type="button" onclick="openDeleteConfirmModal(${comp.id})" class="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 cursor-pointer" title="Delete">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                    </div>
+                `;
+            }
+
+            try {
+                const res = await fetch(`/api/complaints/${complaintId}/timeline`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (!res.ok) throw new Error('Failed to load timeline.');
+
+                const timeline = await parseSafeJson(res);
+                if (!Array.isArray(timeline) || timeline.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-400 py-6 text-center">No updates recorded yet.</p>';
+                    return;
+                }
+
+                container.innerHTML = timeline.map(t => `
+                    <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-slate-900">${escapeHtml(t.status)}</span>
+                            <span class="text-slate-400 text-[10px]">${timeAgo(t.created_at)}</span>
+                        </div>
+                        <p class="text-slate-700">${escapeHtml(t.message || 'Status updated.')}</p>
+                        ${t.staff_name ? `<p class="text-[10px] text-blue-600 font-medium">Updated by: ${escapeHtml(t.staff_name)}</p>` : ''}
+                    </div>
+                `).join('');
+            } catch (e) {
+                container.innerHTML = '<p class="text-xs text-rose-500 py-6 text-center">Failed to load timeline.</p>';
+            }
+        }
+
+        // ==========================================
+        // 9. UTILITIES
+        // ==========================================
+        function handleSignOut() {
+            localStorage.clear();
+            window.location.replace('/login.html');
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            if (id === 'modal-camera') {
+                stopCameraStream();
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function formatBytes(bytes, decimals = 1) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function timeAgo(dateString) {
+            if (!dateString) return 'recently';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffSeconds = Math.floor((now - date) / 1000);
+
+            if (diffSeconds < 60) return 'Just now';
+            const diffMins = Math.floor(diffSeconds / 60);
+            if (diffMins < 60) return `${diffMins}m ago`;
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours}h ago`;
+            const diffDays = Math.floor(diffHours / 24);
+            if (diffDays < 30) return `${diffDays}d ago`;
+            return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.className = 'pointer-events-auto p-3.5 rounded-xl shadow-lg border text-xs font-semibold bg-slate-900 text-white flex items-center justify-between gap-2';
+            if (type === 'success') toast.className = 'pointer-events-auto p-3.5 rounded-xl shadow-lg border text-xs font-semibold bg-emerald-600 text-white flex items-center justify-between gap-2';
+            if (type === 'error') toast.className = 'pointer-events-auto p-3.5 rounded-xl shadow-lg border text-xs font-semibold bg-rose-600 text-white flex items-center justify-between gap-2';
+            if (type === 'warning') toast.className = 'pointer-events-auto p-3.5 rounded-xl shadow-lg border text-xs font-semibold bg-amber-600 text-white flex items-center justify-between gap-2';
+            
+            toast.innerHTML = `<span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3800);
+        }
+    </script>
+</body>
+</html>

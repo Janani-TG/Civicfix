@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Municipal Personnel - Admin Portal | CivicFix</title>
+
+    <!-- Google Fonts: Public Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Google Material Symbols Outlined -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- API Config & Interceptor for Mobile -->
+    <script src="../../js/api-config.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Public Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                    colors: {
+                        civic: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen pb-24 select-none">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- ============================================== -->
+    <!-- TOP HEADER BAR (Screenshot 5)                  -->
+    <!-- ============================================== -->
+    <header class="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+            
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs">
+                    <span class="material-symbols-outlined text-lg">shield</span>
+                </div>
+                <div>
+                    <span class="text-sm font-bold tracking-wider uppercase text-slate-900">ADMIN PORTAL</span>
+                    <span class="text-xs text-slate-400 font-medium ml-1">/ Staff</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Notifications -->
+                <button type="button" onclick="showToast('All administrative alerts clear.', 'info')"
+                    class="w-9 h-9 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-all cursor-pointer relative">
+                    <span class="material-symbols-outlined text-xl">notifications</span>
+                    <span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
+                </button>
+
+                <!-- Sign Out -->
+                <button type="button" onclick="handleSignOut()"
+                    class="w-9 h-9 rounded-xl border border-slate-200 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center text-slate-600 hover:text-rose-600 transition-all cursor-pointer"
+                    title="Sign Out">
+                    <span class="material-symbols-outlined text-xl">logout</span>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- ============================================== -->
+    <!-- MAIN CONTAINER                                 -->
+    <!-- ============================================== -->
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 pt-6">
+
+        <!-- Subheader Section -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div>
+                <span class="text-[11px] uppercase tracking-widest text-slate-400 font-bold block mb-0.5">CIVIL OVERSIGHT</span>
+                <h1 class="text-2xl font-bold tracking-tight text-slate-900">Municipal Personnel</h1>
+            </div>
+
+            <button type="button" onclick="openAddStaffModal()"
+                class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold shadow-sm shadow-blue-500/20 transition-all cursor-pointer">
+                <span class="material-symbols-outlined text-lg">person_add</span>
+                <span>+ Add Staff</span>
+            </button>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 3-COLUMN METRICS GRID                          -->
+        <!-- ============================================== -->
+        <div class="grid grid-cols-3 gap-3 sm:gap-4 mb-6">
+            <!-- Metric 1: Active Staff -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <span class="text-xs font-semibold text-slate-500 block mb-1">Active</span>
+                <span id="metric-active" class="text-2xl sm:text-3xl font-extrabold text-blue-600">--</span>
+            </div>
+
+            <!-- Metric 2: Total Reports -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <span class="text-xs font-semibold text-slate-500 block mb-1">Total Reports</span>
+                <span id="metric-reports" class="text-2xl sm:text-3xl font-extrabold text-blue-600">--</span>
+            </div>
+
+            <!-- Metric 3: Urgent Open -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <span class="text-xs font-semibold text-slate-500 block mb-1">Urgent Open</span>
+                <span id="metric-urgent" class="text-2xl sm:text-3xl font-extrabold text-rose-600">--</span>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SEARCH & DEPARTMENT FILTERS                    -->
+        <!-- ============================================== -->
+        <div class="space-y-3 mb-6">
+            <!-- Search Bar -->
+            <div class="relative">
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+                <input type="text" id="search-input" oninput="handleSearch(this.value)"
+                    placeholder="Search staff by name, email, or badge ID..."
+                    class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400 text-xs sm:text-sm focus:border-blue-600 focus:ring-4 focus:ring-blue-100 transition-all shadow-xs">
+            </div>
+
+            <!-- Department Filter Chips -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1" id="dept-filter-container">
+                <button onclick="filterDepartment('ALL', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-blue-600 bg-blue-600 text-white shadow-xs transition-all">
+                    All Staff
+                </button>
+                <button onclick="filterDepartment('Sanitation & Waste', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+                    Sanitation & Waste
+                </button>
+                <button onclick="filterDepartment('Electrical & Lights', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+                    Electrical & Lights
+                </button>
+                <button onclick="filterDepartment('Road Works & Infrastructure', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+                    Road Works & Infrastructure
+                </button>
+                <button onclick="filterDepartment('Water Supply & Drainage', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+                    Water Supply & Drainage
+                </button>
+                <button onclick="filterDepartment('Public Health', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+                    Public Health
+                </button>
+                <button onclick="filterDepartment('Town Planning', this)" class="dept-chip whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+                    Town Planning
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PERSONNEL CARDS LIST (Screenshot 5)            -->
+        <!-- ============================================== -->
+        <div id="staff-list" class="space-y-3">
+            <!-- Skeleton Loader -->
+            <div class="animate-pulse space-y-3">
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 h-24"></div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 h-24"></div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 h-24"></div>
+            </div>
+        </div>
+
+        <!-- Empty Results Message -->
+        <div id="empty-staff" class="hidden py-14 text-center bg-white rounded-2xl border border-slate-200/80 p-6">
+            <div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                <span class="material-symbols-outlined text-2xl">person_off</span>
+            </div>
+            <h3 class="text-sm font-bold text-slate-800">No personnel found</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Try adjusting your search query or department filter.</p>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SECTION: COMPLAINTS & EVIDENCE AUDIT           -->
+        <!-- ============================================== -->
+        <div id="section-admin-complaints" class="hidden space-y-5">
+            <!-- Executive Audit Summary Banner -->
+            <div class="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-3xl p-5 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                    <span class="px-2.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold uppercase tracking-wider text-blue-100">Municipal Audit Center</span>
+                    <h2 class="text-xl font-extrabold mt-1">Grievances & Before/After Proof Audit</h2>
+                    <p class="text-xs text-blue-100 mt-0.5 max-w-md">Inspect city complaints, staff resolution photos, AI verification scores, and citizen feedback summaries.</p>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-white/20 text-white flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-3xl">fact_check</span>
+                </div>
+            </div>
+
+            <!-- Executive Summary Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs">
+                    <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Total Grievances</span>
+                    <div id="audit-stat-total" class="text-xl font-black text-slate-900 mt-1">0</div>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs">
+                    <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Staff Proof Photos</span>
+                    <div id="audit-stat-photos" class="text-xl font-black text-blue-600 mt-1">0</div>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs">
+                    <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Citizen Verified</span>
+                    <div id="audit-stat-verified" class="text-xl font-black text-emerald-600 mt-1">0</div>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs">
+                    <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Reopened Issues</span>
+                    <div id="audit-stat-reopened" class="text-xl font-black text-rose-600 mt-1">0</div>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                <button type="button" onclick="filterAdminComplaints('ALL', this)" class="admin-comp-filter px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-xs">All Complaints</button>
+                <button type="button" onclick="filterAdminComplaints('Resolved', this)" class="admin-comp-filter px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Resolved</button>
+                <button type="button" onclick="filterAdminComplaints('In Progress', this)" class="admin-comp-filter px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">In Progress</button>
+                <button type="button" onclick="filterAdminComplaints('Received', this)" class="admin-comp-filter px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Received</button>
+                <button type="button" onclick="filterAdminComplaints('WITH_PROOF', this)" class="admin-comp-filter px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">With After Photo</button>
+            </div>
+
+            <!-- Admin Complaints List -->
+            <div id="admin-complaints-list" class="space-y-3">
+                <div class="animate-pulse space-y-3">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 h-32"></div>
+                </div>
+            </div>
+
+            <div id="empty-admin-complaints" class="hidden py-14 text-center bg-white rounded-2xl border border-slate-200 p-6">
+                <span class="material-symbols-outlined text-3xl text-slate-400 mb-1">assignment_turned_in</span>
+                <h3 class="text-sm font-bold text-slate-800">No Complaints Match Filter</h3>
+                <p class="text-xs text-slate-400 mt-0.5">Select a different filter chip above.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ============================================== -->
+    <!-- FIXED BOTTOM NAVIGATION BAR                    -->
+    <!-- ============================================== -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 py-2 px-6 z-30">
+        <div class="max-w-md mx-auto flex items-center justify-around">
+            
+            <!-- Tab: Staff Personnel -->
+            <button type="button" onclick="switchAdminMainTab('staff')" id="nav-staff"
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all">
+                <span class="material-symbols-outlined text-22">badge</span>
+                <span class="text-[11px]">Staff</span>
+            </button>
+
+            <!-- Tab: Complaints Audit -->
+            <button type="button" onclick="switchAdminMainTab('complaints')" id="nav-complaints"
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition-all relative">
+                <span class="material-symbols-outlined text-22">fact_check</span>
+                <span class="text-[11px]">Complaints</span>
+                <span id="admin-complaints-badge" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-500"></span>
+            </button>
+
+            <!-- Tab: Add Staff -->
+            <button type="button" onclick="openAddStaffModal()" id="nav-add-staff"
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all">
+                <span class="material-symbols-outlined text-22">person_add</span>
+                <span class="text-[11px] font-medium">Add Staff</span>
+            </button>
+
+            <!-- Tab: Queries -->
+            <button type="button" onclick="openAdminQueriesModal()" id="nav-queries"
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all relative">
+                <span class="material-symbols-outlined text-22">chat</span>
+                <span class="text-[11px] font-medium">Queries</span>
+                <span id="admin-queries-badge" class="hidden absolute top-1 right-3 w-2 h-2 rounded-full bg-rose-500"></span>
+            </button>
+
+            <!-- Tab: Sign Out -->
+            <button type="button" onclick="handleSignOut()" id="nav-signout"
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-rose-600 transition-all">
+                <span class="material-symbols-outlined text-22">logout</span>
+                <span class="text-[11px] font-medium">Sign Out</span>
+            </button>
+
+        </div>
+    </nav>
+
+
+    <!-- ============================================================== -->
+    <!-- MODAL 1: ADD STAFF PERSONNEL MODAL                             -->
+    <!-- ============================================================== -->
+    <div id="modal-add-staff" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[90vh] overflow-y-auto no-scrollbar transform transition-all">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">person_add</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Add Municipal Personnel</h2>
+                        <p class="text-xs text-slate-400">Register verified staff credentials</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-add-staff')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <form id="form-add-staff" onsubmit="handleCreateStaff(event)" class="mt-4 space-y-3.5">
+                
+                <div>
+                    <label for="new-staff-name" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Full Name <span class="text-rose-500">*</span>
+                    </label>
+                    <input type="text" id="new-staff-name" required placeholder="e.g. Rajesh Kannan"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+
+                <div>
+                    <label for="new-staff-email" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Official Email <span class="text-rose-500">* (@civicfix.com)</span>
+                    </label>
+                    <input type="email" id="new-staff-email" required placeholder="rajesh@civicfix.com"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="new-staff-dept" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Department <span class="text-rose-500">*</span>
+                        </label>
+                        <select id="new-staff-dept" required
+                            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                            <option value="Sanitation & Waste">Sanitation & Waste</option>
+                            <option value="Electrical & Lights">Electrical & Lights</option>
+                            <option value="Road Works & Infrastructure">Road Works & Infrastructure</option>
+                            <option value="Water Supply & Drainage">Water Supply & Drainage</option>
+                            <option value="Public Health">Public Health</option>
+                            <option value="Town Planning">Town Planning</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="new-staff-designation" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Designation
+                        </label>
+                        <input type="text" id="new-staff-designation" placeholder="e.g. Assistant Engineer"
+                            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="new-staff-badge" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Badge ID
+                        </label>
+                        <input type="text" id="new-staff-badge" placeholder="e.g. CBE-RW-004"
+                            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm font-mono focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                    </div>
+
+                    <div>
+                        <label for="new-staff-phone" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Phone Number
+                        </label>
+                        <input type="tel" id="new-staff-phone" placeholder="9876543210"
+                            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="new-staff-password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Temporary Password <span class="text-rose-500">*</span>
+                    </label>
+                    <input type="password" id="new-staff-password" required value="StaffPassword@123"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+
+                <button type="submit" id="btn-save-staff"
+                    class="w-full mt-2 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">check</span>
+                    <span>Add Staff Member</span>
+                </button>
+
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ============================================================== -->
+    <!-- MODAL 2: STAFF QUERIES MANAGEMENT (Admin View)                -->
+    <!-- ============================================================== -->
+    <div id="modal-admin-queries" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[88vh] flex flex-col transform transition-all">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-600 text-xl">forum</span>
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900 leading-tight">Staff Inquiries & Bottleneck Reports</h2>
+                        <p class="text-xs text-slate-400">Read & reply to staff queries, resource requests, and bottleneck situations</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-admin-queries')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- Query Filter Pills -->
+            <div class="flex items-center gap-1.5 pt-3 pb-1 border-b border-slate-100 overflow-x-auto no-scrollbar shrink-0 text-xs">
+                <button type="button" onclick="filterAdminQueries('ALL', this)" class="admin-query-filter-chip px-3 py-1 rounded-full font-semibold border border-blue-600 bg-blue-600 text-white shadow-xs">
+                    All Queries
+                </button>
+                <button type="button" onclick="filterAdminQueries('Open', this)" class="admin-query-filter-chip px-3 py-1 rounded-full font-medium border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100">
+                    Open / Awaiting Reply
+                </button>
+                <button type="button" onclick="filterAdminQueries('Bottleneck Situation', this)" class="admin-query-filter-chip px-3 py-1 rounded-full font-medium border border-slate-200 bg-slate-50 text-amber-700 hover:bg-amber-50">
+                    ⚠️ Bottlenecks
+                </button>
+                <button type="button" onclick="filterAdminQueries('Resource Needed', this)" class="admin-query-filter-chip px-3 py-1 rounded-full font-medium border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100">
+                    🛠️ Resources
+                </button>
+            </div>
+
+            <!-- Queries Container -->
+            <div id="admin-queries-list" class="flex-1 overflow-y-auto py-4 space-y-3.5 no-scrollbar">
+                <!-- Dynamically populated -->
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL 3: SUSPEND STAFF PERSONNEL MODAL                         -->
+    <!-- ============================================================== -->
+    <div id="modal-suspend-staff" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[90vh] overflow-y-auto no-scrollbar transform transition-all">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">pause_circle</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Suspend Personnel Access</h2>
+                        <p class="text-xs text-slate-400">Set temporary or indefinite suspension</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-suspend-staff')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <form id="form-suspend-staff" onsubmit="handleConfirmSuspend(event)" class="mt-4 space-y-3.5">
+                <input type="hidden" id="suspend-staff-id" value="">
+
+                <!-- Staff Info Summary Box -->
+                <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-100/70 text-blue-700 font-bold text-sm flex items-center justify-center shrink-0" id="suspend-avatar">
+                        --
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h4 class="text-sm font-bold text-slate-900 truncate" id="suspend-staff-name">Staff Name</h4>
+                        <div class="flex items-center gap-2 text-xs text-slate-500">
+                            <span id="suspend-staff-badge" class="font-mono text-[11px] font-semibold">CBE-XX-000</span>
+                            <span>•</span>
+                            <span id="suspend-staff-dept">Department</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Suspension Duration Selector -->
+                <div>
+                    <label for="suspend-duration-select" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Suspension Period <span class="text-rose-500">*</span>
+                    </label>
+                    <select id="suspend-duration-select" onchange="toggleCustomSuspendDate(this.value)" required
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100">
+                        <option value="1">24 Hours (1 Day)</option>
+                        <option value="3">3 Days</option>
+                        <option value="7" selected>7 Days (1 Week)</option>
+                        <option value="14">14 Days (2 Weeks)</option>
+                        <option value="30">30 Days (1 Month)</option>
+                        <option value="custom">Custom Specified Date</option>
+                        <option value="indefinite">Indefinite (Until manually revoked)</option>
+                    </select>
+                </div>
+
+                <!-- Custom Date Picker (Hidden by default) -->
+                <div id="suspend-custom-date-container" class="hidden">
+                    <label for="suspend-custom-date" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Suspend Until Date <span class="text-rose-500">*</span>
+                    </label>
+                    <input type="date" id="suspend-custom-date"
+                        class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-100">
+                </div>
+
+                <!-- Reason for Suspension -->
+                <div>
+                    <label for="suspend-reason" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Reason for Suspension <span class="text-rose-500">*</span>
+                    </label>
+                    <textarea id="suspend-reason" rows="2" required placeholder="e.g. Failure to comply with grievance resolution SLA or pending inquiry"
+                        class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-100"></textarea>
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeModal('modal-suspend-staff')"
+                        class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-xs sm:text-sm transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" id="btn-confirm-suspend"
+                        class="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-semibold text-xs sm:text-sm shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-base">pause</span>
+                        <span>Confirm Suspension</span>
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL 4: ADMIN COMPLAINT AUDIT & EVIDENCE INSPECTION MODAL       -->
+    <!-- ============================================================== -->
+    <div id="modal-admin-complaint-audit" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-xl rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[92vh] overflow-y-auto no-scrollbar transform transition-all space-y-4">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">fact_check</span>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Grievance & Resolution Evidence Audit</h2>
+                        <p id="admin-audit-ref" class="text-xs text-slate-400 font-mono">#CF-0000</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-admin-complaint-audit')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- BEFORE & AFTER PHOTO PROOF COMPARISON GRID -->
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Before & After Photo Comparison</label>
+                    <span id="admin-audit-ai-status" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">AI Inspection Ready</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <div>
+                        <span class="block text-[10px] font-bold uppercase text-slate-500 mb-1">📷 Before (Reported Issue)</span>
+                        <div class="w-full h-44 rounded-xl bg-slate-200 overflow-hidden border border-slate-300 relative group cursor-pointer" id="admin-before-photo-box">
+                            <img id="admin-audit-before-img" src="" class="w-full h-full object-cover">
+                        </div>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] font-bold uppercase text-emerald-700 mb-1">✅ After (Staff Repair Proof)</span>
+                        <div class="w-full h-44 rounded-xl bg-emerald-50 overflow-hidden border border-emerald-300 relative group cursor-pointer" id="admin-after-photo-box">
+                            <img id="admin-audit-after-img" src="" class="w-full h-full object-cover">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grievance Summary Meta Card -->
+            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+                <div class="flex items-center justify-between">
+                    <span id="admin-audit-title" class="font-bold text-slate-900 text-sm">Issue Title</span>
+                    <span id="admin-audit-status-pill" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">Status</span>
+                </div>
+                
+                <p id="admin-audit-description" class="text-slate-600 text-xs">Description text...</p>
+
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 text-[11px]">
+                    <div>
+                        <span class="text-slate-400 font-bold uppercase text-[9px] block">Citizen Reporter</span>
+                        <span id="admin-audit-citizen-name" class="font-bold text-slate-800">Citizen Name</span>
+                        <span id="admin-audit-citizen-contact" class="block text-slate-500 font-mono text-[10px]">Contact</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 font-bold uppercase text-[9px] block">Location & Ward</span>
+                        <span id="admin-audit-location" class="font-semibold text-slate-800">Location Name</span>
+                        <a id="admin-audit-gmaps-link" href="#" target="_blank" class="text-blue-600 font-bold hover:underline block text-[10px] mt-0.5">Open in Google Maps &rarr;</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Citizen Feedback & Verification Box -->
+            <div id="admin-audit-feedback-box" class="hidden p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1">
+                <div class="font-bold flex items-center justify-between">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm text-amber-600">rate_review</span>
+                        <span>Citizen Review & Rating</span>
+                    </span>
+                    <span id="admin-audit-rating-stars" class="text-amber-600 font-extrabold">⭐ 5/5</span>
+                </div>
+                <p id="admin-audit-feedback-text" class="text-slate-700 italic">"Feedback message..."</p>
+            </div>
+
+            <!-- Admin Resolution Audit & Reopen Action Panel -->
+            <div id="admin-audit-action-panel" class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-xs">
+                <input type="hidden" id="admin-audit-complaint-id" value="">
+                
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-base text-blue-600">verified_user</span>
+                        <span>Admin Audit Action</span>
+                    </span>
+                    <span id="admin-audit-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        Pending Admin Audit
+                    </span>
+                </div>
+
+                <!-- Reopen Reason Input (For Reopening Ticket) -->
+                <div>
+                    <label for="admin-audit-reopen-reason" class="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Reopen Reason / Instructions <span class="text-slate-400 font-normal">(required if rejecting fix)</span>
+                    </label>
+                    <textarea id="admin-audit-reopen-reason" rows="2" placeholder="e.g. Debris not cleared completely. Please re-inspect and clean the site."
+                        class="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs focus:border-rose-500 focus:ring-2 focus:ring-rose-100"></textarea>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <button type="button" id="btn-admin-delete-complaint" onclick="deleteAdminComplaintFromModal()"
+                        class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors" title="Permanently Delete Complaint">
+                        <span class="material-symbols-outlined text-base">delete_forever</span>
+                        <span>Delete Complaint</span>
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="btn-admin-reopen-ticket" onclick="handleAdminVerifyAction('reject')"
+                            class="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors">
+                            <span class="material-symbols-outlined text-base">published_with_changes</span>
+                            <span>Reject & Reopen Ticket</span>
+                        </button>
+                        <button type="button" id="btn-admin-approve-fix" onclick="handleAdminVerifyAction('approve')"
+                            class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-colors">
+                            <span class="material-symbols-outlined text-base">verified</span>
+                            <span>Approve & Verify Fix</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-1">
+                <button type="button" onclick="closeModal('modal-admin-complaint-audit')" class="w-full py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer">
+                    Close Audit View
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="/admin/home/index.js"></script>
+</body>
+</html>
