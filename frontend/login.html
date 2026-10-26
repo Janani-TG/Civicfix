@@ -757,13 +757,25 @@
         </div>
 
         <!-- Municipal Footer Info -->
-        <div class="mt-6 text-center">
-            <a href="/civicfix.apk" download="CivicFix.apk"
-                class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-semibold shadow-sm transition-all hover:scale-105 active:scale-95">
-                <span class="material-symbols-outlined text-emerald-600 text-lg">android</span>
-                <span>Download Android App (.apk)</span>
-                <span class="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-mono">4.2 MB</span>
-            </a>
+        <div class="mt-6 text-center space-y-2.5">
+            <div>
+                <a href="/civicfix.apk" download="CivicFix.apk"
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-semibold shadow-sm transition-all hover:scale-105 active:scale-95">
+                    <span class="material-symbols-outlined text-emerald-600 text-lg">android</span>
+                    <span>Download Android App (.apk)</span>
+                    <span class="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-mono">4.2 MB</span>
+                </a>
+            </div>
+
+            <!-- Mobile Server Status Pill -->
+            <div id="mobile-server-bar" class="text-center">
+                <button type="button" onclick="openServerConfigModal()"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-sm transition-all cursor-pointer">
+                    <span class="w-2 h-2 rounded-full bg-slate-300" id="server-status-dot"></span>
+                    <span id="server-status-label">Server: Checking...</span>
+                    <span class="material-symbols-outlined text-sm text-blue-600">settings</span>
+                </button>
+            </div>
         </div>
 
         <div class="mt-4 text-center text-xs text-slate-400 space-y-1">
@@ -804,8 +816,100 @@
         </div>
     </div>
 
+    <!-- ============================================== -->
+    <!-- MOBILE SERVER IP CONFIGURATION MODAL          -->
+    <!-- ============================================== -->
+    <div id="server-config-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-4 transition-all">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-2xl border border-slate-100 transform transition-all scale-100 relative">
+            <button type="button" onclick="closeServerConfigModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer">
+                <span class="material-symbols-outlined text-xl">close</span>
+            </button>
+            <div class="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-blue-100 shadow-sm">
+                <span class="material-symbols-outlined text-2xl">router</span>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-1">Server Connection Settings</h3>
+            <p class="text-xs text-slate-500 mb-4 leading-relaxed">
+                Connect your phone to the CivicFix backend running on your computer.
+            </p>
+            <div class="text-left space-y-3 mb-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Backend Server Address</label>
+                    <input type="text" id="server-ip-input" placeholder="http://192.168.1.131:3000"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 font-mono text-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
+                </div>
+                <div class="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-900 space-y-1">
+                    <p class="font-semibold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">info</span> Quick Guide:
+                    </p>
+                    <p>1. Ensure phone & PC are on the <strong>same Wi-Fi network</strong>.</p>
+                    <p>2. Computer Wi-Fi IP is: <code class="font-mono font-bold bg-white px-1 py-0.5 rounded border border-blue-200">192.168.1.131</code></p>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" onclick="applyPresetServer('http://192.168.1.131:3000')"
+                        class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-all cursor-pointer">
+                        Use Wi-Fi IP
+                    </button>
+                    <button type="button" onclick="applyPresetServer('http://localhost:3000')"
+                        class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-all cursor-pointer">
+                        Use USB (localhost)
+                    </button>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" onclick="closeServerConfigModal()"
+                    class="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="btn-save-server" onclick="handleSaveServer()"
+                    class="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">wifi_find</span>
+                    <span>Connect & Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openServerConfigModal() {
+            const modal = document.getElementById('server-config-modal');
+            const input = document.getElementById('server-ip-input');
+            if (input) input.value = window.API_BASE || 'http://192.168.1.131:3000';
+            if (modal) modal.classList.remove('hidden');
+        }
+        function closeServerConfigModal() {
+            const modal = document.getElementById('server-config-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+        function applyPresetServer(url) {
+            const input = document.getElementById('server-ip-input');
+            if (input) input.value = url;
+        }
+        async function handleSaveServer() {
+            const input = document.getElementById('server-ip-input');
+            const btn = document.getElementById('btn-save-server');
+            if (!input) return;
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">refresh</span> Connecting...';
+            try {
+                const res = await window.setServerAddress(input.value);
+                if (typeof showToast === 'function') {
+                    showToast('Connected to CivicFix server: ' + res.url, 'success');
+                }
+                closeServerConfigModal();
+            } catch (e) {
+                if (typeof showToast === 'function') {
+                    showToast(e.message || 'Failed to connect to server', 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+    </script>
+
     <!-- Login Logic Script -->
-    <script src="/js/login.js"></script>
+    <script src="js/login.js"></script>
 </body>
 
 </html>

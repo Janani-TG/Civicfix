@@ -29,6 +29,12 @@ const app = express();
 const PORT = 3000;
 
 // Middleware
+app.use((req, res, next) => {
+    if (req.url.startsWith("//")) {
+        req.url = req.url.replace(/^\/+/, "/");
+    }
+    next();
+});
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -59,8 +65,21 @@ app.get("/api", (req, res) => {
 
 // Start server on all network interfaces
 const os = require("os");
+const { exec } = require("child_process");
+
 function getLocalIp() {
     const ifaces = os.networkInterfaces();
+    // Prioritize Wi-Fi or Wireless adapters
+    for (const dev in ifaces) {
+        if (/wi-?fi|wlan/i.test(dev)) {
+            for (const details of ifaces[dev]) {
+                if (details.family === "IPv4" && !details.internal) {
+                    return details.address;
+                }
+            }
+        }
+    }
+    // Fallback to any non-internal IPv4
     for (const dev in ifaces) {
         for (const details of ifaces[dev]) {
             if (details.family === "IPv4" && !details.internal) {
@@ -71,9 +90,22 @@ function getLocalIp() {
     return "127.0.0.1";
 }
 
+function tryAdbReverse() {
+    const defaultAdb = "C:\\Users\\SHRI\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe";
+    const adbCmd = fs.existsSync(defaultAdb) ? `"${defaultAdb}"` : "adb";
+    exec(`${adbCmd} reverse tcp:3000 tcp:3000`, (err, stdout) => {
+        if (!err) {
+            console.log(`  USB/ADB: http://localhost:${PORT}/login.html (Active on connected USB phone)`);
+        }
+    });
+}
+
 app.listen(PORT, "0.0.0.0", () => {
     const localIp = getLocalIp();
-    console.log(`CivicFix server running at:`);
-    console.log(`  Local:   http://localhost:${PORT}/login.html`);
-    console.log(`  Network: http://${localIp}:${PORT}/login.html (Open on your phone)`);
+    console.log(`\n==============================================`);
+    console.log(`🚀 CivicFix Server Active:`);
+    console.log(`  Local PC: http://localhost:${PORT}/login.html`);
+    console.log(`  Phone Wi-Fi: http://${localIp}:${PORT}/login.html`);
+    console.log(`==============================================`);
+    tryAdbReverse();
 });

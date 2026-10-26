@@ -26,8 +26,10 @@ function ensureColumnsExist() {
 }
 ensureColumnsExist();
 
+const { getMunicipalAnalytics } = require("../analytics_helper");
+
 // ==========================================
-// 1. ADMIN METRICS
+// 1. ADMIN METRICS & ANALYTICS
 // ==========================================
 router.get("/metrics", authenticateToken, (req, res) => {
     try {
@@ -61,6 +63,24 @@ router.get("/metrics", authenticateToken, (req, res) => {
     } catch (error) {
         console.error("admin metrics error:", error);
         res.status(500).json({ message: "Failed to fetch admin metrics." });
+    }
+});
+
+// GET FULL MUNICIPAL ANALYTICS (AREAS, DEPT REPLY RATES, AREA vs DEPT MATRIX)
+router.get("/analytics", authenticateToken, (req, res) => {
+    try {
+        if (req.user.role !== "admin") {
+            return res.status(403).json({ message: "Admin access required." });
+        }
+
+        const analytics = getMunicipalAnalytics();
+        res.json({
+            success: true,
+            analytics
+        });
+    } catch (error) {
+        console.error("admin analytics error:", error);
+        res.status(500).json({ message: "Failed to fetch municipal analytics: " + error.message });
     }
 });
 

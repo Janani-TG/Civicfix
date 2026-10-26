@@ -780,37 +780,48 @@ let currentAdminCompFilter = 'ALL';
 function switchAdminMainTab(tab) {
     const navStaff = document.getElementById('nav-staff');
     const navComplaints = document.getElementById('nav-complaints');
+    const navAnalytics = document.getElementById('nav-analytics');
     
-    // We can use a container toggle or scroll if on single page
-    const staffSection = document.getElementById('staff-list')?.parentElement;
     const complaintsSection = document.getElementById('section-admin-complaints');
+    const analyticsSection = document.getElementById('section-admin-analytics');
 
-    const activeNavClass = 'flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all';
-    const inactiveNavClass = 'flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition-all relative';
+    const activeNavClass = 'flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all';
+    const inactiveNavClass = 'flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition-all relative';
 
-    if (tab === 'complaints') {
-        if (navStaff) navStaff.className = inactiveNavClass;
+    // Reset all nav tabs to inactive
+    if (navStaff) navStaff.className = inactiveNavClass;
+    if (navComplaints) navComplaints.className = inactiveNavClass;
+    if (navAnalytics) navAnalytics.className = inactiveNavClass;
+
+    // Helper to toggle staff view elements
+    const setStaffViewsVisible = (visible) => {
+        const action = visible ? 'remove' : 'add';
+        document.getElementById('staff-list')?.classList[action]('hidden');
+        document.getElementById('dept-filter-container')?.classList[action]('hidden');
+        document.querySelector('main > div.grid')?.classList[action]('hidden');
+        document.querySelector('main > div.space-y-3')?.classList[action]('hidden');
+        if (!visible) document.getElementById('empty-staff')?.classList.add('hidden');
+    };
+
+    if (tab === 'analytics') {
+        if (navAnalytics) navAnalytics.className = activeNavClass;
+        setStaffViewsVisible(false);
+        if (complaintsSection) complaintsSection.classList.add('hidden');
+        if (analyticsSection) analyticsSection.classList.remove('hidden');
+        loadAdminAnalytics();
+    } else if (tab === 'complaints') {
         if (navComplaints) navComplaints.className = activeNavClass;
-        
-        // Hide staff list section elements
-        document.getElementById('staff-list')?.classList.add('hidden');
-        document.getElementById('empty-staff')?.classList.add('hidden');
-        document.getElementById('dept-filter-container')?.classList.add('hidden');
-        document.querySelector('main > div.grid')?.classList.add('hidden');
-        document.querySelector('main > div.space-y-3')?.classList.add('hidden');
-
+        setStaffViewsVisible(false);
+        if (analyticsSection) analyticsSection.classList.add('hidden');
         if (complaintsSection) complaintsSection.classList.remove('hidden');
         loadAdminComplaintsAudit();
     } else {
+        // Default: 'staff'
         if (navStaff) navStaff.className = activeNavClass;
-        if (navComplaints) navComplaints.className = inactiveNavClass;
-
-        document.getElementById('staff-list')?.classList.remove('hidden');
-        document.getElementById('dept-filter-container')?.classList.remove('hidden');
-        document.querySelector('main > div.grid')?.classList.remove('hidden');
-        document.querySelector('main > div.space-y-3')?.classList.remove('hidden');
-
+        setStaffViewsVisible(true);
         if (complaintsSection) complaintsSection.classList.add('hidden');
+        if (analyticsSection) analyticsSection.classList.add('hidden');
+        loadStaffDirectory();
     }
 }
 
@@ -1113,4 +1124,501 @@ function deleteAdminComplaintFromModal() {
     if (complaintId) {
         deleteAdminComplaint(complaintId);
     }
+}
+
+// ==========================================
+// 10. MUNICIPAL ANALYTICS, CHARTS & PERFORMANCE
+// ==========================================
+let currentAnalyticsData = null;
+let currentAreaChartType = 'bar';
+let adminAreaChartInstance = null;
+let adminDeptChartInstance = null;
+let adminCrossChartInstance = null;
+
+async function loadAdminAnalytics(forceRefresh = false) {
+    if (!authToken) return;
+    try {
+        const response = await fetch('/api/admin/analytics', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch analytics data.');
+
+        const result = await response.json();
+        currentAnalyticsData = result.analytics;
+
+        renderAnalyticsKPIs(currentAnalyticsData.summary, currentAnalyticsData.departmentPerformance);
+        renderAdminAreaChart(currentAnalyticsData.areaAnalytics);
+        renderAdminAreaRanking(currentAnalyticsData.areaAnalytics.areas);
+        renderAdminDeptChart(currentAnalyticsData.departmentPerformance);
+        renderAdminDeptTable(currentAnalyticsData.departmentPerformance.departments);
+        renderAdminCrossChart(currentAnalyticsData.areaDepartmentCross);
+        renderAdminCrossMatrixCards(currentAnalyticsData.areaDepartmentCross.matrix);
+
+        if (forceRefresh) {
+            showToast('Municipal analytics updated with live data.', 'success');
+        }
+
+    } catch (err) {
+        console.error('Analytics load error:', err);
+        showToast('Failed to load municipal analytics: ' + err.message, 'error');
+    }
+}
+
+function renderAnalyticsKPIs(summary, deptData) {
+    if (!summary) return;
+
+    // 1. Most Reported Area
+    const topAreaEl = document.getElementById('analytics-top-area');
+    const topAreaSubEl = document.getElementById('analytics-top-area-sub');
+    if (topAreaEl) topAreaEl.textContent = summary.topReportedArea || 'Gandhipuram';
+    if (topAreaSubEl) {
+        topAreaSubEl.textContent = `${summary.topReportedAreaCount || 0} reports (${summary.totalComplaints > 0 ? Math.round((summary.topReportedAreaCount / summary.totalComplaints) * 100) : 0}% of city)`;
+    }
+
+    // 2. Top Potential Department
+    const topDeptEl = document.getElementById('analytics-top-dept');
+    const topDeptSubEl = document.getElementById('analytics-top-dept-sub');
+    if (topDeptEl) topDeptEl.textContent = summary.topPotentialDept || 'N/A';
+    if (topDeptSubEl) {
+        topDeptSubEl.textContent = `${summary.topReplyRate || 100}% Reply Rate (Score: ${summary.topPotentialScore || 100}/100)`;
+    }
+
+    // 3. Avg City Reply Rate
+    const avgReplyEl = document.getElementById('analytics-avg-reply-rate');
+    if (avgReplyEl && deptData && deptData.departments) {
+        const activeDepts = deptData.departments.filter(d => d.total > 0);
+        const avgRate = activeDepts.length > 0
+            ? Math.round(activeDepts.reduce((acc, d) => acc + d.replyRate, 0) / activeDepts.length)
+            : 100;
+        avgReplyEl.textContent = `${avgRate}%`;
+    }
+
+    // 4. Resolution Rate
+    const cityResEl = document.getElementById('analytics-city-resolution');
+    const cityResCountEl = document.getElementById('analytics-city-resolved-count');
+    if (cityResEl) {
+        const resRate = summary.totalComplaints > 0 ? Math.round((summary.resolvedComplaints / summary.totalComplaints) * 100) : 0;
+        cityResEl.textContent = `${resRate}%`;
+    }
+    if (cityResCountEl) {
+        cityResCountEl.textContent = `${summary.resolvedComplaints || 0} of ${summary.totalComplaints || 0} resolved`;
+    }
+}
+
+function setAreaChartType(type) {
+    currentAreaChartType = type;
+    const btnBar = document.getElementById('btn-area-bar');
+    const btnPie = document.getElementById('btn-area-pie');
+
+    if (type === 'bar') {
+        if (btnBar) {
+            btnBar.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-xs transition-all';
+        }
+        if (btnPie) {
+            btnPie.className = 'px-3 py-1 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-800 transition-all';
+        }
+    } else {
+        if (btnPie) {
+            btnPie.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-xs transition-all';
+        }
+        if (btnBar) {
+            btnBar.className = 'px-3 py-1 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-800 transition-all';
+        }
+    }
+
+    if (currentAnalyticsData && currentAnalyticsData.areaAnalytics) {
+        renderAdminAreaChart(currentAnalyticsData.areaAnalytics);
+    }
+}
+
+function renderAdminAreaChart(areaData) {
+    const canvas = document.getElementById('admin-area-chart');
+    if (!canvas || !window.Chart) return;
+
+    if (adminAreaChartInstance) {
+        adminAreaChartInstance.destroy();
+    }
+
+    const labels = areaData.chartData.labels;
+    const data = areaData.chartData.data;
+    const colors = areaData.chartData.colors;
+
+    if (currentAreaChartType === 'pie') {
+        adminAreaChartInstance = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 12,
+                            font: { family: '"Public Sans", sans-serif', size: 11, weight: '600' }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = ctx.raw || 0;
+                                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                return ` ${ctx.label}: ${val} complaints (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '60%'
+            }
+        });
+    } else {
+        adminAreaChartInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Complaints Reported',
+                    data: data,
+                    backgroundColor: colors,
+                    borderRadius: 8,
+                    maxBarThickness: 38
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = ctx.raw || 0;
+                                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                return ` Reports: ${val} (${pct}% of city total)`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: '"Public Sans", sans-serif', size: 11, weight: '500' } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1,
+                            font: { family: '"Public Sans", sans-serif', size: 11 }
+                        },
+                        grid: { color: '#f1f5f9' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function renderAdminAreaRanking(areas) {
+    const listEl = document.getElementById('admin-area-ranking-list');
+    if (!listEl || !areas) return;
+
+    if (areas.length === 0) {
+        listEl.innerHTML = '<div class="text-xs text-slate-400 py-3">No area complaint data available.</div>';
+        return;
+    }
+
+    const maxCount = Math.max(...areas.map(a => a.total), 1);
+
+    listEl.innerHTML = areas.map((a, idx) => {
+        const pctWidth = Math.round((a.total / maxCount) * 100);
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+
+        return `
+            <div class="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-100 transition-all">
+                <div class="flex items-center justify-between text-xs mb-1.5">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-500 w-5">${medal}</span>
+                        <span class="font-bold text-slate-900">${escapeHtml(a.area)}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-bold text-slate-900">${a.total} reports</span>
+                        <span class="text-[10px] font-semibold text-slate-400">(${a.percentage}%)</span>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-200/70 h-2 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500" style="width: ${pctWidth}%;"></div>
+                </div>
+                <div class="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                    <span>Resolved: <strong class="text-emerald-600 font-semibold">${a.resolved}</strong></span>
+                    <span>Resolution Rate: <strong class="text-slate-600 font-semibold">${a.resolutionRate}%</strong></span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderAdminDeptChart(deptData) {
+    const canvas = document.getElementById('admin-dept-chart');
+    if (!canvas || !window.Chart || !deptData) return;
+
+    if (adminDeptChartInstance) {
+        adminDeptChartInstance.destroy();
+    }
+
+    const labels = deptData.chartData.labels;
+    const replyRates = deptData.chartData.replyRates;
+    const resolutionRates = deptData.chartData.resolutionRates;
+    const potentialScores = deptData.chartData.potentialScores;
+
+    adminDeptChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Reply Rate (%)',
+                    data: replyRates,
+                    backgroundColor: '#2563eb', // blue
+                    borderRadius: 6,
+                    maxBarThickness: 24
+                },
+                {
+                    label: 'Resolution Rate (%)',
+                    data: resolutionRates,
+                    backgroundColor: '#10b981', // emerald
+                    borderRadius: 6,
+                    maxBarThickness: 24
+                },
+                {
+                    label: 'Full Potential Score (0-100)',
+                    data: potentialScores,
+                    backgroundColor: '#8b5cf6', // purple
+                    borderRadius: 6,
+                    maxBarThickness: 24
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 14,
+                        font: { family: '"Public Sans", sans-serif', size: 11, weight: '600' }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            return ` ${ctx.dataset.label}: ${ctx.raw}${ctx.datasetIndex < 2 ? '%' : '/100'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        font: { family: '"Public Sans", sans-serif', size: 11, weight: '500' },
+                        maxRotation: 20
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        stepSize: 20,
+                        callback: val => `${val}%`,
+                        font: { family: '"Public Sans", sans-serif', size: 11 }
+                    },
+                    grid: { color: '#f1f5f9' }
+                }
+            }
+        }
+    });
+}
+
+function renderAdminDeptTable(departments) {
+    const tbody = document.getElementById('admin-dept-table-body');
+    if (!tbody || !departments) return;
+
+    tbody.innerHTML = departments.map(d => {
+        return `
+            <tr class="hover:bg-slate-50/80 transition-colors">
+                <td class="py-3 px-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${d.color};"></span>
+                        <span class="font-bold text-slate-900">${escapeHtml(d.name)}</span>
+                    </div>
+                </td>
+                <td class="py-3 px-3 font-mono font-semibold text-slate-800">${d.total}</td>
+                <td class="py-3 px-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-bold text-blue-600">${d.replyRate}%</span>
+                        <div class="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                            <div class="h-full bg-blue-600 rounded-full" style="width: ${d.replyRate}%;"></div>
+                        </div>
+                    </div>
+                </td>
+                <td class="py-3 px-3">
+                    <span class="font-mono font-bold text-emerald-600">${d.resolved}</span>
+                    <span class="text-[10px] text-slate-400 font-normal">(${d.resolutionRate}%)</span>
+                </td>
+                <td class="py-3 px-3">
+                    <span class="font-mono font-extrabold text-purple-700">${d.potentialScore}/100</span>
+                </td>
+                <td class="py-3 px-3">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${d.potentialColor}">
+                        ${d.potentialGrade} ${d.potentialBadge}
+                    </span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAdminCrossChart(crossData) {
+    const canvas = document.getElementById('admin-cross-chart');
+    if (!canvas || !window.Chart || !crossData) return;
+
+    if (adminCrossChartInstance) {
+        adminCrossChartInstance.destroy();
+    }
+
+    const labels = crossData.labels;
+    const datasets = crossData.datasets.map(ds => ({
+        ...ds,
+        borderRadius: 4,
+        maxBarThickness: 34
+    }));
+
+    adminCrossChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 12,
+                        font: { family: '"Public Sans", sans-serif', size: 11, weight: '600' }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            return ` ${ctx.dataset.label}: ${ctx.raw} reports`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: {
+                        font: { family: '"Public Sans", sans-serif', size: 11, weight: '500' }
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        font: { family: '"Public Sans", sans-serif', size: 11 }
+                    },
+                    grid: { color: '#f1f5f9' }
+                }
+            }
+        }
+    });
+}
+
+function renderAdminCrossMatrixCards(matrix) {
+    const container = document.getElementById('admin-cross-matrix-cards');
+    if (!container || !matrix) return;
+
+    if (matrix.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-400 py-3 col-span-2">No cross-distribution data available.</div>';
+        return;
+    }
+
+    container.innerHTML = matrix.map(m => {
+        const deptTags = m.departmentBreakdown.map(db => `
+            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-none">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full" style="background-color: ${db.color};"></span>
+                    <span class="text-slate-700 font-medium">${escapeHtml(db.department)}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="font-mono font-bold text-slate-900">${db.count}</span>
+                    <span class="text-[10px] text-slate-400 font-semibold">(${db.share}%)</span>
+                </div>
+            </div>
+        `).join('');
+
+        return `
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-rose-500 text-lg">location_on</span>
+                        <h4 class="font-bold text-sm text-slate-900">${escapeHtml(m.area)}</h4>
+                    </div>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-white text-slate-800 border border-slate-200">
+                        ${m.totalReports} reports
+                    </span>
+                </div>
+                <div class="text-[11px] text-slate-500 mb-2">
+                    Primary Route: <strong class="text-blue-700">${escapeHtml(m.primaryDepartment)}</strong> (${m.primaryDepartmentCount} issues)
+                </div>
+                <div class="bg-white rounded-xl p-2.5 border border-slate-100 space-y-1">
+                    ${deptTags}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function handleAdminExportReport(format) {
+    if (!currentAnalyticsData) {
+        showToast('Analytics data not loaded yet. Please wait.', 'warning');
+        return;
+    }
+    if (!window.CivicFixReportExporter) {
+        showToast('Report exporter is initializing. Please try again.', 'error');
+        return;
+    }
+
+    const context = {
+        userRole: 'admin',
+        userName: (currentUser && currentUser.name) ? currentUser.name : 'Municipal Administrator',
+        userDepartment: 'Municipal Administration',
+        areaCanvasId: 'admin-area-chart',
+        deptCanvasId: 'admin-dept-chart',
+        crossCanvasId: 'admin-cross-chart'
+    };
+
+    window.CivicFixReportExporter.exportReport(format, currentAnalyticsData, context);
 }

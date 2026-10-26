@@ -52,6 +52,21 @@ function ensureComplaintColumns() {
         if (!existingNames.includes("resolved_image_path")) {
             db.exec("ALTER TABLE complaints ADD COLUMN resolved_image_path TEXT;");
         }
+        if (!existingNames.includes("resolved_latitude")) {
+            db.exec("ALTER TABLE complaints ADD COLUMN resolved_latitude REAL;");
+        }
+        if (!existingNames.includes("resolved_longitude")) {
+            db.exec("ALTER TABLE complaints ADD COLUMN resolved_longitude REAL;");
+        }
+        if (!existingNames.includes("geo_distance_meters")) {
+            db.exec("ALTER TABLE complaints ADD COLUMN geo_distance_meters REAL;");
+        }
+        if (!existingNames.includes("geo_verification_status")) {
+            db.exec("ALTER TABLE complaints ADD COLUMN geo_verification_status TEXT;");
+        }
+        if (!existingNames.includes("geo_verification_reason")) {
+            db.exec("ALTER TABLE complaints ADD COLUMN geo_verification_reason TEXT;");
+        }
         if (!existingNames.includes("ai_verification_status")) {
             db.exec("ALTER TABLE complaints ADD COLUMN ai_verification_status TEXT;");
         }

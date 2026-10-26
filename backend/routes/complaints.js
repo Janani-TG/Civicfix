@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const exifr = require("exifr");
 const db = require("../database");
 const upload = require("../middleware/upload");
 
@@ -18,7 +19,7 @@ router.post("/", (req, res, next) => {
         }
         next();
     });
-}, (req, res) => {
+}, async (req, res) => {
     try {
         const body = req.body || {};
         const { title, category, description, location, priority, latitude, longitude, formatted_address, place_name } = body;
@@ -33,8 +34,24 @@ router.post("/", (req, res, next) => {
             });
         }
 
-        const parsedLat = latitude ? parseFloat(latitude) : null;
-        const parsedLng = longitude ? parseFloat(longitude) : null;
+        let parsedLat = latitude ? parseFloat(latitude) : null;
+        let parsedLng = longitude ? parseFloat(longitude) : null;
+
+        // Auto-extract EXIF GPS coordinates from uploaded photo
+        if (req.file) {
+            try {
+                const exifGps = await exifr.gps(req.file.path);
+                if (exifGps && typeof exifGps.latitude === 'number' && typeof exifGps.longitude === 'number') {
+                    console.log(`[Citizen] Extracted EXIF GPS from complaint image: ${exifGps.latitude}, ${exifGps.longitude}`);
+                    if (isNaN(parsedLat) || isNaN(parsedLng) || parsedLat === null || parsedLng === null) {
+                        parsedLat = exifGps.latitude;
+                        parsedLng = exifGps.longitude;
+                    }
+                }
+            } catch (exifErr) {
+                console.warn("[Citizen] EXIF extraction notice:", exifErr.message);
+            }
+        }
 
         const result = db.prepare(`
             INSERT INTO complaints
@@ -140,7 +157,7 @@ router.put("/:id", (req, res, next) => {
         }
         next();
     });
-}, (req, res) => {
+}, async (req, res) => {
     try {
         const { title, category, description, location, priority, latitude, longitude, formatted_address, place_name, remove_image } = req.body;
         const complaintId = req.params.id;
@@ -163,6 +180,8 @@ router.put("/:id", (req, res, next) => {
         }
 
         let updatedImagePath = existing.image_path;
+        let parsedLat = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : existing.latitude;
+        let parsedLng = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : existing.longitude;
 
         if (req.file) {
             // Remove previous image file if it exists
@@ -173,6 +192,18 @@ router.put("/:id", (req, res, next) => {
                 }
             }
             updatedImagePath = `/uploads/${req.file.filename}`;
+
+            try {
+                const exifGps = await exifr.gps(req.file.path);
+                if (exifGps && typeof exifGps.latitude === 'number' && typeof exifGps.longitude === 'number') {
+                    if (latitude === undefined || latitude === null || latitude === '') {
+                        parsedLat = exifGps.latitude;
+                        parsedLng = exifGps.longitude;
+                    }
+                }
+            } catch (exifErr) {
+                console.warn("[Citizen Edit] EXIF extraction notice:", exifErr.message);
+            }
         } else if (remove_image === 'true') {
             if (existing.image_path) {
                 const oldFilePath = path.join(__dirname, "..", existing.image_path);
@@ -182,9 +213,6 @@ router.put("/:id", (req, res, next) => {
             }
             updatedImagePath = null;
         }
-
-        const parsedLat = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : existing.latitude;
-        const parsedLng = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : existing.longitude;
 
         db.prepare(`
             UPDATE complaints

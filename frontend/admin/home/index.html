@@ -15,8 +15,17 @@
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for High-Definition Municipal Analytics -->
+    <script src="../../js/chart.umd.min.js"></script>
+    <script>
+        if (typeof Chart === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>');
+        }
+    </script>
     <!-- API Config & Interceptor for Mobile -->
     <script src="../../js/api-config.js"></script>
+    <!-- Municipal Report Exporter (Print/PDF, Excel, Word Doc) -->
+    <script src="../../js/report-exporter.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -251,47 +260,248 @@
             </div>
         </div>
 
+        <!-- ============================================== -->
+        <!-- SECTION: MUNICIPAL ANALYTICS & CHARTS          -->
+        <!-- ============================================== -->
+        <div id="section-admin-analytics" class="hidden space-y-6">
+            
+            <!-- Executive Banner -->
+            <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden border border-slate-700/50">
+                <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-[11px] font-bold uppercase tracking-wider text-blue-200">
+                            <span class="material-symbols-outlined text-xs">analytics</span>
+                            <span>Municipal Intelligence Center</span>
+                        </div>
+                        <h2 class="text-2xl font-black mt-2 text-white tracking-tight">Civic Trends & Department Potential</h2>
+                        <p class="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                            Visualizing area report volumes, department responsiveness & reply rates, and cross-departmental ward distributions.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 self-start md:self-auto">
+                        <!-- Print Visual Report (PDF) -->
+                        <button type="button" onclick="handleAdminExportReport('print')"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-xs font-bold text-white shadow-md shadow-blue-500/30 transition-all cursor-pointer"
+                            title="Print Official Visual Report with Embedded Charts">
+                            <span class="material-symbols-outlined text-sm">print</span>
+                            <span>Print Report</span>
+                        </button>
+
+                        <!-- Export to Excel (CSV) -->
+                        <button type="button" onclick="handleAdminExportReport('excel')"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white shadow-md shadow-emerald-500/30 transition-all cursor-pointer"
+                            title="Export Structured Dataset as Excel Spreadsheet">
+                            <span class="material-symbols-outlined text-sm">table_view</span>
+                            <span>Excel</span>
+                        </button>
+
+                        <!-- Export as Word Document -->
+                        <button type="button" onclick="handleAdminExportReport('doc')"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-xs font-bold text-white shadow-md shadow-indigo-500/30 transition-all cursor-pointer"
+                            title="Export as Microsoft Word Document">
+                            <span class="material-symbols-outlined text-sm">description</span>
+                            <span>Word Doc</span>
+                        </button>
+
+                        <!-- Refresh Data -->
+                        <button type="button" onclick="loadAdminAnalytics(true)"
+                            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold text-white border border-white/20 backdrop-blur-sm transition-all cursor-pointer"
+                            title="Refresh Analytics">
+                            <span class="material-symbols-outlined text-sm">refresh</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4 Quick KPI Highlight Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Most Reported Area</span>
+                        <span class="material-symbols-outlined text-base text-rose-500">location_on</span>
+                    </div>
+                    <div id="analytics-top-area" class="text-lg font-black text-slate-900 truncate">Loading...</div>
+                    <span id="analytics-top-area-sub" class="text-[11px] text-slate-400 font-medium">-- reports</span>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Top Potential Dept</span>
+                        <span class="material-symbols-outlined text-base text-emerald-500">military_tech</span>
+                    </div>
+                    <div id="analytics-top-dept" class="text-lg font-black text-slate-900 truncate">Loading...</div>
+                    <span id="analytics-top-dept-sub" class="text-[11px] text-emerald-600 font-bold">100% Reply Rate</span>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Avg City Reply Rate</span>
+                        <span class="material-symbols-outlined text-base text-blue-500">forum</span>
+                    </div>
+                    <div id="analytics-avg-reply-rate" class="text-lg font-black text-blue-600">--%</div>
+                    <span class="text-[11px] text-slate-400 font-medium">Active civic replies</span>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Resolution Rate</span>
+                        <span class="material-symbols-outlined text-base text-purple-500">task_alt</span>
+                    </div>
+                    <div id="analytics-city-resolution" class="text-lg font-black text-purple-600">--%</div>
+                    <span id="analytics-city-resolved-count" class="text-[11px] text-slate-400 font-medium">-- resolved</span>
+                </div>
+            </div>
+
+            <!-- ROW 1: WHICH AREA IS REPORTED THE MOST -->
+            <div class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                            <h3 class="text-base font-bold text-slate-900">Which Area is Reported the Most?</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Municipal grievance volume distribution across city areas and wards</p>
+                    </div>
+                    <!-- Chart Type Switcher: Bar vs Pie -->
+                    <div class="inline-flex p-1 bg-slate-100 rounded-xl self-start sm:self-auto">
+                        <button type="button" onclick="setAreaChartType('bar')" id="btn-area-bar" class="px-3 py-1 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-xs transition-all">Bar Graph</button>
+                        <button type="button" onclick="setAreaChartType('pie')" id="btn-area-pie" class="px-3 py-1 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-800 transition-all">Pie / Donut</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                    <div class="lg:col-span-7 relative min-h-[250px] flex items-center justify-center">
+                        <canvas id="admin-area-chart" height="230"></canvas>
+                    </div>
+                    <div class="lg:col-span-5 space-y-2.5">
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Area Density Ranking</div>
+                        <div id="admin-area-ranking-list" class="space-y-2 max-h-[260px] overflow-y-auto no-scrollbar pr-1">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 2: WHICH DEPARTMENT RESPONDS TO USER WITH FULL POTENTIAL (REPLY RATE) -->
+            <div class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                            <h3 class="text-base font-bold text-slate-900">Department Response & Full Potential (Reply Rate)</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Benchmarking responsiveness: Reply Rate (60%) + Verified Resolution Rate (40%)</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            Reply Rate Benchmark
+                        </span>
+                    </div>
+                </div>
+
+                <div class="relative min-h-[260px]">
+                    <canvas id="admin-dept-chart" height="240"></canvas>
+                </div>
+
+                <!-- Department Scorecard Table -->
+                <div class="overflow-x-auto no-scrollbar rounded-2xl border border-slate-100">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/80">
+                            <tr>
+                                <th class="py-2.5 px-3">Department</th>
+                                <th class="py-2.5 px-3">Total Reports</th>
+                                <th class="py-2.5 px-3">Reply Rate</th>
+                                <th class="py-2.5 px-3">Resolved</th>
+                                <th class="py-2.5 px-3">Potential Score</th>
+                                <th class="py-2.5 px-3">Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-dept-table-body" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ROW 3: ADMIN SPECIFIC: WHICH AREA GETS MORE REPORT AND REPORTED TO WHICH DEPT -->
+            <div class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                            <h3 class="text-base font-bold text-slate-900">Area &rarr; Department Cross-Distribution</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Identify which municipal areas generate the most reports and to which department each is routed</p>
+                    </div>
+                    <div class="inline-flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                        <span class="material-symbols-outlined text-sm text-indigo-500">stacked_bar_chart</span>
+                        <span>Stacked Department View</span>
+                    </div>
+                </div>
+
+                <div class="relative min-h-[300px]">
+                    <canvas id="admin-cross-chart" height="280"></canvas>
+                </div>
+
+                <!-- Area to Department Matrix Cards -->
+                <div class="pt-2">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Area Department Breakdown Cards</div>
+                    <div id="admin-cross-matrix-cards" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
     </main>
 
     <!-- ============================================== -->
     <!-- FIXED BOTTOM NAVIGATION BAR                    -->
     <!-- ============================================== -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 py-2 px-6 z-30">
-        <div class="max-w-md mx-auto flex items-center justify-around">
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 py-2 px-4 sm:px-6 z-30 shadow-lg">
+        <div class="max-w-lg mx-auto flex items-center justify-between">
             
             <!-- Tab: Staff Personnel -->
             <button type="button" onclick="switchAdminMainTab('staff')" id="nav-staff"
-                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all">
+                class="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all">
                 <span class="material-symbols-outlined text-22">badge</span>
                 <span class="text-[11px]">Staff</span>
             </button>
 
             <!-- Tab: Complaints Audit -->
             <button type="button" onclick="switchAdminMainTab('complaints')" id="nav-complaints"
-                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition-all relative">
+                class="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition-all relative">
                 <span class="material-symbols-outlined text-22">fact_check</span>
                 <span class="text-[11px]">Complaints</span>
                 <span id="admin-complaints-badge" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-500"></span>
             </button>
 
+            <!-- Tab: Analytics & Reports (NEW) -->
+            <button type="button" onclick="switchAdminMainTab('analytics')" id="nav-analytics"
+                class="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition-all relative">
+                <span class="material-symbols-outlined text-22">insights</span>
+                <span class="text-[11px]">Analytics</span>
+            </button>
+
             <!-- Tab: Add Staff -->
             <button type="button" onclick="openAddStaffModal()" id="nav-add-staff"
-                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all">
+                class="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all">
                 <span class="material-symbols-outlined text-22">person_add</span>
                 <span class="text-[11px] font-medium">Add Staff</span>
             </button>
 
             <!-- Tab: Queries -->
             <button type="button" onclick="openAdminQueriesModal()" id="nav-queries"
-                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all relative">
+                class="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all relative">
                 <span class="material-symbols-outlined text-22">chat</span>
                 <span class="text-[11px] font-medium">Queries</span>
-                <span id="admin-queries-badge" class="hidden absolute top-1 right-3 w-2 h-2 rounded-full bg-rose-500"></span>
+                <span id="admin-queries-badge" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
             </button>
 
             <!-- Tab: Sign Out -->
             <button type="button" onclick="handleSignOut()" id="nav-signout"
-                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-rose-600 transition-all">
+                class="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl text-slate-500 hover:text-rose-600 transition-all">
                 <span class="material-symbols-outlined text-22">logout</span>
                 <span class="text-[11px] font-medium">Sign Out</span>
             </button>

@@ -4,8 +4,36 @@ const authenticateToken = require("../middleware/auth");
 const upload = require("../middleware/upload");
 const path = require("path");
 const fs = require("fs");
+const exifr = require("exifr");
+const { getMunicipalAnalytics } = require("../analytics_helper");
 
 const router = express.Router();
+
+// Haversine formula to compute geodesic distance between two GPS coordinates in meters
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+    if (lat1 === null || lat1 === undefined || lon1 === null || lon1 === undefined ||
+        lat2 === null || lat2 === undefined || lon2 === null || lon2 === undefined) {
+        return null;
+    }
+    const p1 = parseFloat(lat1);
+    const l1 = parseFloat(lon1);
+    const p2 = parseFloat(lat2);
+    const l2 = parseFloat(lon2);
+    if (isNaN(p1) || isNaN(l1) || isNaN(p2) || isNaN(l2)) return null;
+
+    const R = 6371e3; // Earth radius in meters
+    const phi1 = (p1 * Math.PI) / 180;
+    const phi2 = (p2 * Math.PI) / 180;
+    const deltaPhi = ((p2 - p1) * Math.PI) / 180;
+    const deltaLambda = ((l2 - l1) * Math.PI) / 180;
+
+    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+              Math.cos(phi1) * Math.cos(phi2) *
+              Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return Math.round(R * c * 10) / 10;
+}
 
 // Helper to read image as base64 for Gemini Vision API (Cross-platform Windows & Linux compatible)
 function getImageBase64(imagePath) {
@@ -239,7 +267,7 @@ function checkImageDuplicate(beforeImageData, afterImageData) {
     return false;
 }
 
-// POST VERIFY RESOLUTION PHOTO WITH AI
+// POST VERIFY RESOLUTION PHOTO WITH AI & GEOTAG
 router.post("/verify-resolution", authenticateToken, upload.single("resolved_image"), async (req, res) => {
     try {
         if (req.user.role !== "staff" && req.user.role !== "admin") {
@@ -262,30 +290,162 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
 
         const resolvedImagePath = "/uploads/" + req.file.filename;
 
-        // Base64 of before image & after image
-        const beforeImageData = getImageBase64(complaint.image_path);
-        const afterImageData = getImageBase64(resolvedImagePath);
+        // ========================================================
+        // 1. EXTRACT GEOTAG FROM RESOLUTION PHOTO & DEVICE GPS
+        // ========================================================
+        let staffLat = null;
+        let staffLng = null;
+        let geoSource = null;
 
-        // 1. HARDENED DUPLICATE IMAGE CHECK
-        // If the uploaded resolution photo is identical or a re-saved copy of the original issue photo:
-        const isDuplicateImage = checkImageDuplicate(beforeImageData, afterImageData);
+        // 1a. Attempt to read EXIF GPS metadata from the uploaded photo file
+        try {
+            const exifGps = await exifr.gps(req.file.path);
+            if (exifGps && typeof exifGps.latitude === 'number' && typeof exifGps.longitude === 'number') {
+                staffLat = exifGps.latitude;
+                staffLng = exifGps.longitude;
+                geoSource = 'photo_exif';
+                console.log(`[GeoTag] Extracted EXIF GPS from staff resolution photo: ${staffLat}, ${staffLng}`);
+            }
+        } catch (exifErr) {
+            console.warn("[GeoTag] Staff photo EXIF read notice:", exifErr.message);
+        }
 
-        if (isDuplicateImage) {
-            const reasoning = "AI Verification Rejected: The uploaded resolution photo is identical to the original complaint photo. Please upload a genuine photo of the completed repair work.";
-            
+        // 1b. Fallback to device GPS coordinates submitted at photo capture time
+        if ((staffLat === null || staffLng === null) && req.body.staff_latitude && req.body.staff_longitude) {
+            const pLat = parseFloat(req.body.staff_latitude);
+            const pLng = parseFloat(req.body.staff_longitude);
+            if (!isNaN(pLat) && !isNaN(pLng)) {
+                staffLat = pLat;
+                staffLng = pLng;
+                geoSource = req.body.geo_source || 'device_gps';
+                console.log(`[GeoTag] Using staff device GPS coordinates: ${staffLat}, ${staffLng}`);
+            }
+        }
+
+        // Ensure complaint location is known (backfill from citizen photo if missing)
+        let compLat = complaint.latitude;
+        let compLng = complaint.longitude;
+
+        if ((compLat === null || compLng === null) && complaint.image_path) {
+            try {
+                const cleanPath = complaint.image_path.replace(/\\/g, '/').replace(/^\//, '');
+                const compImgPath = path.join(__dirname, '..', cleanPath);
+                if (fs.existsSync(compImgPath)) {
+                    const compGps = await exifr.gps(compImgPath);
+                    if (compGps && typeof compGps.latitude === 'number' && typeof compGps.longitude === 'number') {
+                        compLat = compGps.latitude;
+                        compLng = compGps.longitude;
+                        db.prepare("UPDATE complaints SET latitude = ?, longitude = ? WHERE id = ?").run(compLat, compLng, complaint.id);
+                        console.log(`[GeoTag] Backfilled complaint #${complaint.id} GPS from original photo: ${compLat}, ${compLng}`);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // ========================================================
+        // 2. GEOLOCATION MATCHING VERIFICATION (Haversine Geo-Fence)
+        // ========================================================
+        const MAX_RADIUS_METERS = 200; // 200 meters allowed tolerance for on-site work
+        let geoMatch = false;
+        let geoVerificationStatus = 'rejected';
+        let geoVerificationReason = '';
+        let distanceMeters = null;
+
+        if (compLat !== null && compLng !== null) {
+            if (staffLat !== null && staffLng !== null) {
+                distanceMeters = calculateDistanceMeters(compLat, compLng, staffLat, staffLng);
+                const distStr = distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(2)} km` : `${Math.round(distanceMeters)} meters`;
+
+                if (distanceMeters <= MAX_RADIUS_METERS) {
+                    geoMatch = true;
+                    geoVerificationStatus = 'verified';
+                    geoVerificationReason = `Geo-tag Verified: Staff photo captured on-site (${distStr} from grievance pin, within ${MAX_RADIUS_METERS}m radius).`;
+                } else {
+                    geoMatch = false;
+                    geoVerificationStatus = 'rejected';
+                    geoVerificationReason = `Geo-tag Verification Rejected: Staff resolution photo was taken ${distStr} away from grievance site (Allowed radius: ${MAX_RADIUS_METERS}m). Resolution photo must be taken at the actual grievance site.`;
+                }
+            } else {
+                geoMatch = false;
+                geoVerificationStatus = 'rejected';
+                geoVerificationReason = `Geo-tag Verification Rejected: No GPS coordinates detected in the staff resolution photo or device. A photo with geo-tag is required to verify resolution.`;
+            }
+        } else {
+            // Grievance had no recorded GPS coordinates (legacy complaint)
+            geoMatch = true;
+            geoVerificationStatus = 'skipped';
+            geoVerificationReason = `Geo-tag Notice: Grievance had no recorded GPS coordinates. Staff photo location recorded as ${staffLat ? staffLat.toFixed(5) + ', ' + staffLng.toFixed(5) : 'unspecified'}.`;
+        }
+
+        // If geo-tag verification fails, immediately reject and prevent resolution
+        if (!geoMatch) {
             db.prepare(`
                 UPDATE complaints
                 SET resolved_image_path = ?,
+                    resolved_latitude = ?,
+                    resolved_longitude = ?,
+                    geo_distance_meters = ?,
+                    geo_verification_status = 'rejected',
+                    geo_verification_reason = ?,
                     ai_verification_status = 'rejected',
                     ai_verification_reason = ?,
                     ai_confidence = 0,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            `).run(resolvedImagePath, reasoning, complaintId);
+            `).run(resolvedImagePath, staffLat, staffLng, distanceMeters, geoVerificationReason, geoVerificationReason, complaintId);
 
             return res.json({
                 success: true,
                 isResolved: false,
+                geoMatch: false,
+                geoVerificationStatus: 'rejected',
+                geoReason: geoVerificationReason,
+                distanceMeters,
+                staffCoords: staffLat && staffLng ? { latitude: staffLat, longitude: staffLng, source: geoSource } : null,
+                complaintCoords: compLat && compLng ? { latitude: compLat, longitude: compLng } : null,
+                confidence: 0,
+                reasoning: geoVerificationReason,
+                matchedIssue: "Geo-Location Mismatch",
+                modelUsed: "CivicFix Geo-Fence Inspector",
+                resolvedImagePath
+            });
+        }
+
+        // Base64 of before image & after image
+        const beforeImageData = getImageBase64(complaint.image_path);
+        const afterImageData = getImageBase64(resolvedImagePath);
+
+        // ========================================================
+        // 3. HARDENED DUPLICATE IMAGE CHECK
+        // ========================================================
+        const isDuplicateImage = checkImageDuplicate(beforeImageData, afterImageData);
+
+        if (isDuplicateImage) {
+            const reasoning = "Verification Rejected: The uploaded resolution photo is identical to the original complaint photo. Please upload a genuine photo of the completed repair work.";
+            
+            db.prepare(`
+                UPDATE complaints
+                SET resolved_image_path = ?,
+                    resolved_latitude = ?,
+                    resolved_longitude = ?,
+                    geo_distance_meters = ?,
+                    geo_verification_status = ?,
+                    geo_verification_reason = ?,
+                    ai_verification_status = 'rejected',
+                    ai_verification_reason = ?,
+                    ai_confidence = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(resolvedImagePath, staffLat, staffLng, distanceMeters, geoVerificationStatus, geoVerificationReason, reasoning, complaintId);
+
+            return res.json({
+                success: true,
+                isResolved: false,
+                geoMatch: true,
+                geoVerificationStatus,
+                geoReason: geoVerificationReason,
+                distanceMeters,
+                staffCoords: staffLat && staffLng ? { latitude: staffLat, longitude: staffLng, source: geoSource } : null,
                 confidence: 0,
                 reasoning,
                 matchedIssue: "Duplicate Photo Uploaded",
@@ -294,7 +454,9 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
             });
         }
 
-        // 2. LIVE GEMINI VISION AI VERIFICATION (Visual Clearance Inspection)
+        // ========================================================
+        // 4. LIVE GEMINI VISION AI VERIFICATION (Visual Clearance)
+        // ========================================================
         const apiKey = process.env.GEMINI_API_KEY || req.body.gemini_api_key || req.headers["x-gemini-api-key"];
 
         let aiResult = null;
@@ -311,7 +473,7 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
             }
         }
 
-        // 3. FALLBACK IF VISION SERVICE UNREACHABLE
+        // Fallback if vision service unreachable
         if (!aiResult) {
             aiResult = {
                 isResolved: false,
@@ -322,10 +484,19 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
             };
         }
 
-        // Save AI verification details into complaints table
+        // Final verification passed only if both Geo Match AND AI Vision Match pass
+        const isFullyResolved = geoMatch && aiResult.isResolved;
+        const combinedReasoning = `${geoVerificationReason} ${aiResult.reasoning}`;
+
+        // Save verification details into complaints table
         db.prepare(`
             UPDATE complaints
             SET resolved_image_path = ?,
+                resolved_latitude = ?,
+                resolved_longitude = ?,
+                geo_distance_meters = ?,
+                geo_verification_status = ?,
+                geo_verification_reason = ?,
                 ai_verification_status = ?,
                 ai_verification_reason = ?,
                 ai_confidence = ?,
@@ -333,7 +504,12 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
             WHERE id = ?
         `).run(
             resolvedImagePath,
-            aiResult.isResolved ? 'verified' : 'rejected',
+            staffLat,
+            staffLng,
+            distanceMeters,
+            geoVerificationStatus,
+            geoVerificationReason,
+            isFullyResolved ? 'verified' : (aiResult.isResolved ? 'verified' : 'rejected'),
             aiResult.reasoning,
             aiResult.confidence,
             complaintId
@@ -341,9 +517,15 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
 
         res.json({
             success: true,
-            isResolved: aiResult.isResolved,
+            isResolved: isFullyResolved,
+            geoMatch: true,
+            geoVerificationStatus,
+            geoReason: geoVerificationReason,
+            distanceMeters,
+            staffCoords: staffLat && staffLng ? { latitude: staffLat, longitude: staffLng, source: geoSource } : null,
+            complaintCoords: compLat && compLng ? { latitude: compLat, longitude: compLng } : null,
             confidence: aiResult.confidence,
-            reasoning: aiResult.reasoning,
+            reasoning: combinedReasoning,
             matchedIssue: aiResult.matchedIssue,
             modelUsed: aiResult.modelUsed,
             resolvedImagePath
@@ -351,7 +533,7 @@ router.post("/verify-resolution", authenticateToken, upload.single("resolved_ima
 
     } catch (error) {
         console.error("Verify resolution error:", error);
-        res.status(500).json({ message: "Failed to perform AI resolution verification: " + error.message });
+        res.status(500).json({ message: "Failed to perform resolution verification: " + error.message });
     }
 });
 
@@ -398,6 +580,42 @@ router.get("/dashboard", authenticateToken, (req, res) => {
         console.error(error);
         res.status(500).json({
             message: "Failed to load staff dashboard."
+        });
+    }
+});
+
+// GET MUNICIPAL & DEPARTMENT ANALYTICS FOR STAFF
+router.get("/analytics", authenticateToken, (req, res) => {
+    try {
+        if (req.user.role !== "staff") {
+            return res.status(403).json({
+                message: "Staff access required."
+            });
+        }
+
+        const staffUser = db.prepare(`
+            SELECT id, name, department
+            FROM users
+            WHERE id = ?
+        `).get(req.user.id);
+
+        const fullAnalytics = getMunicipalAnalytics();
+        const staffDept = staffUser ? staffUser.department : null;
+        const myDeptStats = staffDept
+            ? fullAnalytics.departmentPerformance.departments.find(d => d.name.toLowerCase() === staffDept.toLowerCase())
+            : null;
+
+        res.json({
+            success: true,
+            analytics: fullAnalytics,
+            staffDepartment: staffDept,
+            myDeptStats
+        });
+
+    } catch (error) {
+        console.error("staff analytics error:", error);
+        res.status(500).json({
+            message: "Failed to load staff analytics: " + error.message
         });
     }
 });
@@ -495,7 +713,7 @@ router.put("/complaints/:id/status", authenticateToken, (req, res) => {
         }
 
         const complaint = db.prepare(`
-            SELECT id, status, resolved_image_path, ai_verification_status
+            SELECT id, status, resolved_image_path, ai_verification_status, geo_verification_status, geo_verification_reason
             FROM complaints
             WHERE id = ?
         `).get(req.params.id);
@@ -510,7 +728,13 @@ router.put("/complaints/:id/status", authenticateToken, (req, res) => {
             const finalResolvedPath = resolved_image_path || complaint.resolved_image_path;
             if (!finalResolvedPath) {
                 return res.status(400).json({
-                    message: "Cannot mark status as Resolved without uploading and AI-verifying a resolution photo."
+                    message: "Cannot mark status as Resolved without uploading and verifying a resolution photo."
+                });
+            }
+
+            if (complaint.geo_verification_status === 'rejected') {
+                return res.status(400).json({
+                    message: `Cannot mark status as Resolved: Geo-location verification failed. ${complaint.geo_verification_reason || 'Staff photo does not match grievance site.'}`
                 });
             }
 

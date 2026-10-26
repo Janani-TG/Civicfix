@@ -153,6 +153,26 @@ if (!existingCompCols.includes("resolved_image_path")) {
     db.exec("ALTER TABLE complaints ADD COLUMN resolved_image_path TEXT;");
     console.log("Added 'resolved_image_path' column to 'complaints' table.");
 }
+if (!existingCompCols.includes("resolved_latitude")) {
+    db.exec("ALTER TABLE complaints ADD COLUMN resolved_latitude REAL;");
+    console.log("Added 'resolved_latitude' column to 'complaints' table.");
+}
+if (!existingCompCols.includes("resolved_longitude")) {
+    db.exec("ALTER TABLE complaints ADD COLUMN resolved_longitude REAL;");
+    console.log("Added 'resolved_longitude' column to 'complaints' table.");
+}
+if (!existingCompCols.includes("geo_distance_meters")) {
+    db.exec("ALTER TABLE complaints ADD COLUMN geo_distance_meters REAL;");
+    console.log("Added 'geo_distance_meters' column to 'complaints' table.");
+}
+if (!existingCompCols.includes("geo_verification_status")) {
+    db.exec("ALTER TABLE complaints ADD COLUMN geo_verification_status TEXT;");
+    console.log("Added 'geo_verification_status' column to 'complaints' table.");
+}
+if (!existingCompCols.includes("geo_verification_reason")) {
+    db.exec("ALTER TABLE complaints ADD COLUMN geo_verification_reason TEXT;");
+    console.log("Added 'geo_verification_reason' column to 'complaints' table.");
+}
 if (!existingCompCols.includes("ai_verification_status")) {
     db.exec("ALTER TABLE complaints ADD COLUMN ai_verification_status TEXT;");
     console.log("Added 'ai_verification_status' column to 'complaints' table.");

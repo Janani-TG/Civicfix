@@ -914,6 +914,16 @@ function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
+    if (typeof message === 'string' && message.toLowerCase().includes('failed to fetch')) {
+        const activeHost = window.API_BASE || 'http://192.168.1.131:3000';
+        message = `Unable to connect to server (${activeHost}). Ensure your phone and PC are on the same Wi-Fi, or tap "Server" at the bottom to configure.`;
+        type = 'error';
+        const modal = document.getElementById('server-config-modal');
+        if (modal) {
+            setTimeout(() => modal.classList.remove('hidden'), 500);
+        }
+    }
+
     const toast = document.createElement('div');
     toast.className = 'pointer-events-auto flex items-center gap-3 p-4 rounded-xl shadow-lg border text-sm transition-all transform duration-300 translate-y-2 opacity-0';
 
@@ -934,7 +944,7 @@ function showToast(message, type = 'info') {
 
     toast.innerHTML = `
         <span class="material-symbols-outlined text-xl shrink-0">${icon}</span>
-        <div class="flex-1 font-medium">${message}</div>
+        <div class="flex-1 font-medium leading-snug">${message}</div>
         <button type="button" class="text-slate-400 hover:text-slate-700 ml-1 cursor-pointer" onclick="this.parentElement.remove()">
             <span class="material-symbols-outlined text-base">close</span>
         </button>
@@ -947,9 +957,9 @@ function showToast(message, type = 'info') {
         toast.classList.remove('translate-y-2', 'opacity-0');
     });
 
-    // Auto dismiss after 4 seconds
+    // Auto dismiss after 6 seconds
     setTimeout(() => {
         toast.classList.add('opacity-0', 'translate-y-2');
         setTimeout(() => toast.remove(), 300);
-    }, 4000);
+    }, 6000);
 }

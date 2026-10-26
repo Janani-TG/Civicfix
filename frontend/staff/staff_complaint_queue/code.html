@@ -24,8 +24,19 @@
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for High-Definition Municipal Analytics -->
+    <script src="../../js/chart.umd.min.js"></script>
+    <script>
+        if (typeof Chart === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>');
+        }
+    </script>
     <!-- API Config & Interceptor for Mobile -->
     <script src="../../js/api-config.js"></script>
+    <!-- EXIF Geo-tag Extractor -->
+    <script src="../../js/exifr.full.umd.js"></script>
+    <!-- Municipal Report Exporter (Print/PDF, Excel, Word Doc) -->
+    <script src="../../js/report-exporter.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -113,8 +124,11 @@
     <!-- ============================================== -->
     <main class="max-w-3xl mx-auto px-4 sm:px-6 pt-5">
 
-        <!-- Section Header & Controls -->
-        <div class="flex items-center justify-between mb-4">
+        <!-- QUEUE CONTAINER -->
+        <div id="section-staff-queue">
+
+            <!-- Section Header & Controls -->
+            <div class="flex items-center justify-between mb-4">
             <div>
                 <h1 class="text-2xl font-bold tracking-tight text-slate-900">Queue</h1>
                 <p id="queue-subtitle" class="text-xs text-slate-500 font-medium">Loading complaints...</p>
@@ -199,6 +213,144 @@
             <p class="text-xs text-slate-500 mt-1 max-w-xs mx-auto">There are currently no complaints requiring
                 attention for your department filter.</p>
         </div>
+        </div> <!-- /section-staff-queue -->
+
+        <!-- ============================================== -->
+        <!-- SECTION: STAFF MUNICIPAL & DEPT ANALYTICS      -->
+        <!-- ============================================== -->
+        <div id="section-staff-analytics" class="hidden space-y-5 pb-6">
+
+            <!-- Department Spotlight & Scorecard Banner -->
+            <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-5 text-white shadow-lg border border-slate-700/50">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-bold uppercase tracking-wider text-blue-200">
+                            <span class="material-symbols-outlined text-xs">military_tech</span>
+                            <span id="staff-analytics-dept-badge">My Department Benchmark</span>
+                        </div>
+                        <h2 id="staff-analytics-dept-title" class="text-xl font-black mt-2 text-white">Road Works & Infrastructure</h2>
+                        <p class="text-xs text-slate-300 mt-0.5">Municipal grievance distribution and department responsiveness ranking.</p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/15 text-center min-w-[90px]">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-blue-200 block">Reply Rate</span>
+                            <span id="staff-analytics-my-reply" class="text-xl font-extrabold text-white">--%</span>
+                        </div>
+                        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/15 text-center min-w-[90px]">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-blue-200 block">Potential</span>
+                            <span id="staff-analytics-my-score" class="text-xl font-extrabold text-emerald-300">--/100</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Toolbar -->
+                <div class="mt-4 pt-3.5 border-t border-white/15 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <span class="text-blue-200 font-semibold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">print</span>
+                        <span>Official Report Export:</span>
+                    </span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="handleStaffExportReport('print')"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold transition-all shadow-xs cursor-pointer"
+                            title="Print Official Visual Report with Embedded Charts">
+                            <span class="material-symbols-outlined text-sm">print</span>
+                            <span>Print Report</span>
+                        </button>
+                        <button type="button" onclick="handleStaffExportReport('excel')"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold transition-all shadow-xs cursor-pointer"
+                            title="Export as Excel Spreadsheet">
+                            <span class="material-symbols-outlined text-sm">table_view</span>
+                            <span>Excel</span>
+                        </button>
+                        <button type="button" onclick="handleStaffExportReport('doc')"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold transition-all shadow-xs cursor-pointer"
+                            title="Export as Word Document">
+                            <span class="material-symbols-outlined text-sm">description</span>
+                            <span>Word Doc</span>
+                        </button>
+                        <button type="button" onclick="loadStaffAnalytics(true)"
+                            class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-semibold transition-all cursor-pointer"
+                            title="Refresh Analytics">
+                            <span class="material-symbols-outlined text-sm">refresh</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 1: WHICH AREA IS REPORTED THE MOST (BAR GRAPH / PIE CHART) -->
+            <div class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                            <h3 class="text-base font-bold text-slate-900">Which Area is Reported the Most?</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Citywide complaint frequency by locality and municipal ward</p>
+                    </div>
+                    <!-- Chart Switcher -->
+                    <div class="inline-flex p-1 bg-slate-100 rounded-xl self-start sm:self-auto">
+                        <button type="button" onclick="setStaffAreaChartType('bar')" id="btn-staff-area-bar" class="px-3 py-1 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-xs transition-all">Bar Graph</button>
+                        <button type="button" onclick="setStaffAreaChartType('pie')" id="btn-staff-area-pie" class="px-3 py-1 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-800 transition-all">Pie / Donut</button>
+                    </div>
+                </div>
+
+                <div class="relative min-h-[240px]">
+                    <canvas id="staff-area-chart" height="230"></canvas>
+                </div>
+
+                <!-- Area Ranked List -->
+                <div class="pt-2">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Area Report Breakdown</div>
+                    <div id="staff-area-ranking-list" class="space-y-2">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 2: WHICH DEPARTMENT RESPONDS WITH FULL POTENTIAL (USING REPLY RATE) -->
+            <div class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                            <h3 class="text-base font-bold text-slate-900">Department Response & Full Potential</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Responsiveness benchmark: Reply Rate (60%) + Resolution Execution (40%)</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            Reply Rate Benchmark
+                        </span>
+                    </div>
+                </div>
+
+                <div class="relative min-h-[250px]">
+                    <canvas id="staff-dept-chart" height="240"></canvas>
+                </div>
+
+                <!-- Department Scorecard Table for Staff -->
+                <div class="overflow-x-auto no-scrollbar rounded-2xl border border-slate-100">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/80">
+                            <tr>
+                                <th class="py-2.5 px-3">Department</th>
+                                <th class="py-2.5 px-3">Total</th>
+                                <th class="py-2.5 px-3">Reply Rate</th>
+                                <th class="py-2.5 px-3">Resolved</th>
+                                <th class="py-2.5 px-3">Potential Score</th>
+                                <th class="py-2.5 px-3">Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-dept-table-body" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
     </main>
 
     <!-- ============================================== -->
@@ -213,27 +365,34 @@
     <!-- ============================================== -->
     <!-- FIXED BOTTOM NAVIGATION BAR                    -->
     <!-- ============================================== -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 py-2 px-6 z-30">
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 py-2 px-4 sm:px-6 z-30 shadow-lg">
         <div class="max-w-md mx-auto flex items-center justify-around">
 
             <!-- Tab: Queue -->
             <button type="button" onclick="switchNavTab('queue')" id="nav-queue"
-                class="flex flex-col items-center gap-0.5 px-5 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all">
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all">
                 <span class="material-symbols-outlined text-22">format_list_bulleted</span>
                 <span class="text-[11px]">Queue</span>
             </button>
 
+            <!-- Tab: Analytics & Trends (NEW) -->
+            <button type="button" onclick="switchNavTab('analytics')" id="nav-analytics"
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all">
+                <span class="material-symbols-outlined text-22">insights</span>
+                <span class="text-[11px] font-medium">Analytics</span>
+            </button>
+
             <!-- Tab: Queries -->
             <button type="button" onclick="openMyQueriesModal()" id="nav-queries"
-                class="flex flex-col items-center gap-0.5 px-5 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all relative">
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all relative">
                 <span class="material-symbols-outlined text-22">chat</span>
                 <span class="text-[11px] font-medium">Queries</span>
-                <span id="queries-badge" class="hidden absolute top-1 right-5 w-2 h-2 rounded-full bg-rose-500"></span>
+                <span id="queries-badge" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
             </button>
 
             <!-- Tab: Sign Out -->
             <button type="button" onclick="handleSignOut()" id="nav-signout"
-                class="flex flex-col items-center gap-0.5 px-5 py-1 rounded-2xl text-slate-500 hover:text-rose-600 transition-all">
+                class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-rose-600 transition-all">
                 <span class="material-symbols-outlined text-22">logout</span>
                 <span class="text-[11px] font-medium">Sign Out</span>
             </button>
@@ -380,11 +539,40 @@
                         </div>
                     </div>
 
+                    <!-- Live Geo-Tag & Distance Inspection Panel -->
+                    <div id="staff-geotag-panel" class="hidden p-3 rounded-xl border bg-slate-800/90 border-slate-700 text-xs space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1.5 font-bold text-slate-200">
+                                <span class="material-symbols-outlined text-base text-indigo-400">location_searching</span>
+                                <span>Geo-Tag Match Verification</span>
+                            </div>
+                            <span id="staff-geotag-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-700 text-slate-300">Checking...</span>
+                        </div>
+
+                        <!-- Side-by-side coordinates -->
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div class="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                                <span class="text-slate-400 text-[10px] block font-mono">📍 Grievance Site:</span>
+                                <span id="staff-geotag-comp-coords" class="font-bold text-slate-200 font-mono truncate block">--</span>
+                            </div>
+                            <div class="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                                <span class="text-slate-400 text-[10px] block font-mono">📸 Staff Photo Tag:</span>
+                                <span id="staff-geotag-photo-coords" class="font-bold text-slate-200 font-mono truncate block">Acquiring GPS...</span>
+                            </div>
+                        </div>
+
+                        <!-- Distance / Geo-fence status -->
+                        <div id="staff-geotag-distance-status" class="p-2.5 rounded-lg border text-xs font-semibold flex items-center gap-2 bg-slate-900/60 border-slate-700 text-slate-300">
+                            <span id="staff-geotag-distance-icon" class="material-symbols-outlined text-base text-slate-400">near_me</span>
+                            <span id="staff-geotag-distance-text">Calculating distance between photos...</span>
+                        </div>
+                    </div>
+
                     <!-- Verify Button -->
                     <button type="button" id="btn-run-ai-verify" onclick="startAiVerificationProcess()" disabled
                         class="w-full py-2.5 rounded-xl bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-500 hover:bg-indigo-500 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer">
-                        <span class="material-symbols-outlined text-base">auto_awesome</span>
-                        <span>Verify Resolution with AI</span>
+                        <span class="material-symbols-outlined text-base">verified_user</span>
+                        <span>Verify Resolution & Geo-Tag with AI</span>
                     </button>
                 </div>
 

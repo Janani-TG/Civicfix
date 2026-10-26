@@ -188,6 +188,12 @@ function createComplaintCardHtml(comp) {
                             <span class="material-symbols-outlined text-xs text-amber-500">local_fire_department</span>
                             <span>${comp.upvote_count || 0} Upvotes</span>
                         </span>
+                        ${comp.status === 'Resolved' && comp.geo_verification_status === 'verified' ? `
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-xs text-indigo-500">near_me</span>
+                                <span>Geo-Verified (${typeof comp.geo_distance_meters === 'number' ? Math.round(comp.geo_distance_meters) + 'm' : 'On-Site'})</span>
+                            </span>
+                        ` : ''}
                         ${citizenVerifyBadge}
                     </div>
                 </div>
@@ -301,10 +307,43 @@ function applyFilterAndSort() {
 let staffModalMapInstance = null;
 let staffModalMarkerInstance = null;
 
-// AI Resolution Verification State
+// AI & Geo-Tag Resolution Verification State
 let selectedResolvedFile = null;
 let verifiedResolvedImagePath = null;
 let isAiVerified = false;
+let staffGeoLocation = {
+    latitude: null,
+    longitude: null,
+    source: null,
+    isMatch: false,
+    distanceMeters: null
+};
+
+// Haversine formula to compute geodesic distance between two GPS coordinates in meters
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+    if (lat1 === null || lat1 === undefined || lon1 === null || lon1 === undefined ||
+        lat2 === null || lat2 === undefined || lon2 === null || lon2 === undefined) {
+        return null;
+    }
+    const p1 = parseFloat(lat1);
+    const l1 = parseFloat(lon1);
+    const p2 = parseFloat(lat2);
+    const l2 = parseFloat(lon2);
+    if (isNaN(p1) || isNaN(l1) || isNaN(p2) || isNaN(l2)) return null;
+
+    const R = 6371e3; // Earth radius in meters
+    const phi1 = (p1 * Math.PI) / 180;
+    const phi2 = (p2 * Math.PI) / 180;
+    const deltaPhi = ((p2 - p1) * Math.PI) / 180;
+    const deltaLambda = ((l2 - l1) * Math.PI) / 180;
+
+    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+              Math.cos(phi1) * Math.cos(phi2) *
+              Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return Math.round(R * c * 10) / 10;
+}
 
 function openComplaintDetails(id) {
     const comp = allComplaints.find(c => c.id === id);
@@ -381,12 +420,16 @@ function resetResolutionAiState(comp) {
     selectedResolvedFile = null;
     verifiedResolvedImagePath = null;
     isAiVerified = false;
+    staffGeoLocation = { latitude: null, longitude: null, source: null, isMatch: false, distanceMeters: null };
 
     const fileInput = document.getElementById('resolved-file-input');
     if (fileInput) fileInput.value = '';
 
     const grid = document.getElementById('image-comparison-grid');
     if (grid) grid.classList.add('hidden');
+
+    const geotagPanel = document.getElementById('staff-geotag-panel');
+    if (geotagPanel) geotagPanel.classList.add('hidden');
 
     const dropzoneContent = document.getElementById('dropzone-empty-content');
     if (dropzoneContent) dropzoneContent.classList.remove('hidden');
@@ -409,13 +452,14 @@ function resetResolutionAiState(comp) {
     if (resultCard) resultCard.classList.add('hidden');
 }
 
-function handleResolvedFileSelect(event) {
+async function handleResolvedFileSelect(event) {
     const file = event.target.files?.[0];
     if (!file) return;
 
     selectedResolvedFile = file;
     isAiVerified = false;
     verifiedResolvedImagePath = null;
+    staffGeoLocation = { latitude: null, longitude: null, source: null, isMatch: false, distanceMeters: null };
 
     const afterImg = document.getElementById('after-preview-img');
     if (afterImg) afterImg.src = URL.createObjectURL(file);
@@ -438,6 +482,136 @@ function handleResolvedFileSelect(event) {
             btnSave.disabled = true;
             btnSave.classList.add('opacity-50', 'cursor-not-allowed');
         }
+    }
+
+    // Inspect Geo-tag from staff photo & device GPS
+    const comp = allComplaints.find(c => c.id === selectedComplaintId);
+    const compLat = comp && comp.latitude ? parseFloat(comp.latitude) : null;
+    const compLng = comp && comp.longitude ? parseFloat(comp.longitude) : null;
+
+    const geotagPanel = document.getElementById('staff-geotag-panel');
+    if (geotagPanel) geotagPanel.classList.remove('hidden');
+
+    const compCoordsEl = document.getElementById('staff-geotag-comp-coords');
+    if (compCoordsEl) {
+        compCoordsEl.textContent = compLat && compLng ? `${compLat.toFixed(5)}, ${compLng.toFixed(5)}` : 'None recorded';
+    }
+
+    const photoCoordsEl = document.getElementById('staff-geotag-photo-coords');
+    if (photoCoordsEl) {
+        photoCoordsEl.textContent = 'Extracting EXIF GPS...';
+    }
+
+    let photoGps = null;
+    if (window.exifr && typeof window.exifr.gps === 'function') {
+        try {
+            photoGps = await exifr.gps(file);
+        } catch (e) {
+            console.warn('EXIF GPS error:', e);
+        }
+    }
+
+    if (photoGps && typeof photoGps.latitude === 'number' && typeof photoGps.longitude === 'number') {
+        staffGeoLocation.latitude = photoGps.latitude;
+        staffGeoLocation.longitude = photoGps.longitude;
+        staffGeoLocation.source = 'Photo EXIF GPS';
+        updateStaffGeoTagUI(compLat, compLng);
+    } else if (navigator.geolocation) {
+        if (photoCoordsEl) photoCoordsEl.textContent = 'Tagging device GPS...';
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                staffGeoLocation.latitude = pos.coords.latitude;
+                staffGeoLocation.longitude = pos.coords.longitude;
+                staffGeoLocation.source = 'Live Device GPS';
+                updateStaffGeoTagUI(compLat, compLng);
+            },
+            (err) => {
+                staffGeoLocation.latitude = null;
+                staffGeoLocation.longitude = null;
+                staffGeoLocation.source = null;
+                updateStaffGeoTagUI(compLat, compLng);
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    } else {
+        updateStaffGeoTagUI(compLat, compLng);
+    }
+}
+
+function updateStaffGeoTagUI(compLat, compLng) {
+    const photoCoordsEl = document.getElementById('staff-geotag-photo-coords');
+    const badge = document.getElementById('staff-geotag-badge');
+    const statusBox = document.getElementById('staff-geotag-distance-status');
+    const statusIcon = document.getElementById('staff-geotag-distance-icon');
+    const statusText = document.getElementById('staff-geotag-distance-text');
+
+    if (staffGeoLocation.latitude && staffGeoLocation.longitude) {
+        const sourceLabel = staffGeoLocation.source === 'Photo EXIF GPS' ? 'EXIF' : 'GPS';
+        if (photoCoordsEl) {
+            photoCoordsEl.textContent = `${staffGeoLocation.latitude.toFixed(5)}, ${staffGeoLocation.longitude.toFixed(5)} (${sourceLabel})`;
+        }
+
+        if (compLat && compLng) {
+            const dist = calculateDistanceMeters(compLat, compLng, staffGeoLocation.latitude, staffGeoLocation.longitude);
+            staffGeoLocation.distanceMeters = dist;
+            const distStr = dist >= 1000 ? `${(dist / 1000).toFixed(2)} km` : `${Math.round(dist)} meters`;
+
+            if (dist <= 200) {
+                staffGeoLocation.isMatch = true;
+                if (badge) {
+                    badge.textContent = `MATCHED (${Math.round(dist)}m)`;
+                    badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                }
+                if (statusBox) {
+                    statusBox.className = 'p-2.5 rounded-lg border text-xs font-semibold flex items-center gap-2 bg-emerald-950/40 border-emerald-500/40 text-emerald-300';
+                }
+                if (statusIcon) {
+                    statusIcon.textContent = 'verified';
+                    statusIcon.className = 'material-symbols-outlined text-base text-emerald-400';
+                }
+                if (statusText) {
+                    statusText.textContent = `On-site Geo Match: Photo is ${distStr} from grievance site (Within 200m radius)`;
+                }
+            } else {
+                staffGeoLocation.isMatch = false;
+                if (badge) {
+                    badge.textContent = `MISMATCH (${distStr})`;
+                    badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40';
+                }
+                if (statusBox) {
+                    statusBox.className = 'p-2.5 rounded-lg border text-xs font-semibold flex items-center gap-2 bg-rose-950/40 border-rose-500/40 text-rose-300';
+                }
+                if (statusIcon) {
+                    statusIcon.textContent = 'error';
+                    statusIcon.className = 'material-symbols-outlined text-base text-rose-400';
+                }
+                if (statusText) {
+                    statusText.textContent = `Location Mismatch: Photo is ${distStr} away from grievance site (Max allowed: 200m). Verification will fail.`;
+                }
+            }
+        } else {
+            staffGeoLocation.isMatch = true;
+            if (badge) {
+                badge.textContent = 'TAGGED';
+                badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40';
+            }
+            if (statusBox) {
+                statusBox.className = 'p-2.5 rounded-lg border text-xs font-semibold flex items-center gap-2 bg-blue-950/40 border-blue-500/40 text-blue-300';
+            }
+            if (statusIcon) statusIcon.textContent = 'info';
+            if (statusText) statusText.textContent = `Photo tagged with coordinates. Grievance had no recorded pin.`;
+        }
+    } else {
+        if (photoCoordsEl) photoCoordsEl.textContent = 'No GPS found';
+        if (badge) {
+            badge.textContent = 'NO GPS';
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        }
+        if (statusBox) {
+            statusBox.className = 'p-2.5 rounded-lg border text-xs font-semibold flex items-center gap-2 bg-amber-950/40 border-amber-500/40 text-amber-300';
+        }
+        if (statusIcon) statusIcon.textContent = 'warning';
+        if (statusText) statusText.textContent = `No GPS geo-tag detected. Please take photo with GPS location enabled on device.`;
     }
 }
 
@@ -495,13 +669,14 @@ async function startAiVerificationProcess() {
     if (progressBox) progressBox.classList.remove('hidden');
 
     const steps = [
-        { pct: 25, text: 'Uploading resolution photo proof...' },
-        { pct: 55, text: 'Comparing images with Gemini AI Vision...' },
-        { pct: 85, text: 'Finalizing AI resolution assessment...' }
+        { pct: 20, text: 'Extracting and verifying photo geo-tag...' },
+        { pct: 45, text: 'Comparing location against grievance pin (200m radius)...' },
+        { pct: 75, text: 'Inspecting visual clearance with Gemini Vision AI...' },
+        { pct: 90, text: 'Finalizing dual-layer verification assessment...' }
     ];
 
     let currentStep = 0;
-    if (progressBar) progressBar.style.width = '25%';
+    if (progressBar) progressBar.style.width = '20%';
     if (stepText) stepText.textContent = steps[0].text;
 
     const interval = setInterval(() => {
@@ -516,6 +691,9 @@ async function startAiVerificationProcess() {
     const formData = new FormData();
     formData.append('complaint_id', selectedComplaintId);
     formData.append('resolved_image', selectedResolvedFile);
+    if (staffGeoLocation.latitude) formData.append('staff_latitude', staffGeoLocation.latitude);
+    if (staffGeoLocation.longitude) formData.append('staff_longitude', staffGeoLocation.longitude);
+    if (staffGeoLocation.source) formData.append('geo_source', staffGeoLocation.source);
 
     try {
         const response = await fetch('/api/staff/verify-resolution', {
@@ -547,7 +725,7 @@ async function startAiVerificationProcess() {
         clearInterval(interval);
         if (progressBox) progressBox.classList.add('hidden');
         if (btnVerify) btnVerify.disabled = false;
-        console.error("AI verification request failed:", err);
+        console.error("Verification request failed:", err);
         showToast(err.message || 'Verification service error. Please try again.', 'error');
     }
 }
@@ -574,7 +752,7 @@ function renderAiVerificationResult(data) {
             icon.textContent = 'verified';
             icon.className = 'material-symbols-outlined text-lg text-emerald-400';
         }
-        if (title) title.textContent = 'AI Verification Passed';
+        if (title) title.textContent = 'AI & Geo-Tag Verification Passed';
         if (pill) {
             let passConfidence = typeof data.confidence === 'number' ? data.confidence : 90;
             if (passConfidence <= 1 && passConfidence > 0) passConfidence = Math.round(passConfidence * 100);
@@ -582,14 +760,17 @@ function renderAiVerificationResult(data) {
             pill.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
         }
         if (reasonText) reasonText.textContent = data.reasoning;
-        if (modelTag) modelTag.textContent = `Model: ${data.modelUsed || 'Gemini Vision AI'}`;
+        if (modelTag) {
+            const distInfo = typeof data.distanceMeters === 'number' ? ` • Distance: ${Math.round(data.distanceMeters)}m` : '';
+            modelTag.textContent = `Model: ${data.modelUsed || 'Gemini Vision AI'}${distInfo}`;
+        }
 
         if (btnSave && selectedStatus === 'Resolved') {
             btnSave.disabled = false;
             btnSave.classList.remove('opacity-50', 'cursor-not-allowed');
         }
 
-        showToast('AI Verified: Issue resolution confirmed! You may now save status update.', 'success');
+        showToast('Verified: Geo-tag matched on-site & issue clearance confirmed! You may now save status update.', 'success');
     } else {
         isAiVerified = false;
         verifiedResolvedImagePath = null;
@@ -599,25 +780,30 @@ function renderAiVerificationResult(data) {
             icon.textContent = 'warning';
             icon.className = 'material-symbols-outlined text-lg text-rose-400';
         }
-        if (title) title.textContent = 'AI Verification Failed';
+        if (title) {
+            title.textContent = data.geoMatch === false ? 'Geo-Location Mismatch Failed' : 'AI Verification Failed';
+        }
         if (pill) {
             let failConfidence = typeof data.confidence === 'number' ? data.confidence : 0;
             if (failConfidence <= 1 && failConfidence > 0) failConfidence = Math.round(failConfidence * 100);
             if (failConfidence > 10) {
                 failConfidence = Math.max(0, Math.min(10, Math.round((100 - failConfidence) / 10)));
             }
-            pill.textContent = `${failConfidence}% Match`;
+            pill.textContent = data.geoMatch === false ? 'Geo-Failed' : `${failConfidence}% Match`;
             pill.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40';
         }
         if (reasonText) reasonText.textContent = data.reasoning;
-        if (modelTag) modelTag.textContent = `Model: ${data.modelUsed || 'Gemini Vision AI'}`;
+        if (modelTag) {
+            const distInfo = typeof data.distanceMeters === 'number' ? ` • Distance: ${data.distanceMeters >= 1000 ? (data.distanceMeters/1000).toFixed(2) + 'km' : Math.round(data.distanceMeters) + 'm'}` : '';
+            modelTag.textContent = `Inspector: ${data.modelUsed || 'CivicFix Inspector'}${distInfo}`;
+        }
 
         if (btnSave && selectedStatus === 'Resolved') {
             btnSave.disabled = true;
             btnSave.classList.add('opacity-50', 'cursor-not-allowed');
         }
 
-        showToast('AI Verification Failed: The photo does not show a resolved problem.', 'error');
+        showToast(data.reasoning || 'Verification failed. Resolution photo does not meet requirements.', 'error');
     }
 }
 
@@ -945,7 +1131,31 @@ async function handleSubmitQuery(event) {
 // 7. NAVIGATION & LOGOUT
 // ==========================================
 function switchNavTab(tab) {
-    if (tab === 'queue') {
+    const navQueue = document.getElementById('nav-queue');
+    const navAnalytics = document.getElementById('nav-analytics');
+    const navQueries = document.getElementById('nav-queries');
+
+    const queueSection = document.getElementById('section-staff-queue');
+    const analyticsSection = document.getElementById('section-staff-analytics');
+
+    const activeNavClass = 'flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl bg-blue-50 text-blue-700 font-semibold transition-all';
+    const inactiveNavClass = 'flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl text-slate-500 hover:text-slate-800 transition-all';
+
+    if (navQueue) navQueue.className = inactiveNavClass;
+    if (navAnalytics) navAnalytics.className = inactiveNavClass;
+    if (navQueries) navQueries.className = inactiveNavClass;
+
+    if (tab === 'analytics') {
+        if (navAnalytics) navAnalytics.className = activeNavClass;
+        if (queueSection) queueSection.classList.add('hidden');
+        if (analyticsSection) analyticsSection.classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        loadStaffAnalytics();
+    } else {
+        // Default: 'queue'
+        if (navQueue) navQueue.className = activeNavClass;
+        if (analyticsSection) analyticsSection.classList.add('hidden');
+        if (queueSection) queueSection.classList.remove('hidden');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
@@ -1066,4 +1276,345 @@ function showToast(message, type = 'info') {
         toast.classList.add('opacity-0', 'translate-y-2');
         setTimeout(() => toast.remove(), 300);
     }, 4000);
+}
+
+// ==========================================
+// 9. STAFF MUNICIPAL & DEPARTMENT ANALYTICS
+// ==========================================
+let currentStaffAnalyticsData = null;
+let currentStaffAreaChartType = 'bar';
+let staffAreaChartInstance = null;
+let staffDeptChartInstance = null;
+
+async function loadStaffAnalytics(forceRefresh = false) {
+    if (!authToken) return;
+    try {
+        const response = await fetch('/api/staff/analytics', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch staff analytics.');
+
+        const result = await response.json();
+        currentStaffAnalyticsData = result;
+
+        renderStaffDeptSpotlight(result.staffDepartment, result.myDeptStats, result.analytics);
+        renderStaffAreaChart(result.analytics.areaAnalytics);
+        renderStaffAreaRanking(result.analytics.areaAnalytics.areas);
+        renderStaffDeptChart(result.analytics.departmentPerformance, result.staffDepartment);
+        renderStaffDeptTable(result.analytics.departmentPerformance.departments, result.staffDepartment);
+
+        if (forceRefresh) {
+            showToast('Department analytics refreshed.', 'success');
+        }
+    } catch (err) {
+        console.error('Staff analytics load error:', err);
+        showToast('Failed to load department analytics: ' + err.message, 'error');
+    }
+}
+
+function renderStaffDeptSpotlight(deptName, myStats, fullAnalytics) {
+    const titleEl = document.getElementById('staff-analytics-dept-title');
+    const replyEl = document.getElementById('staff-analytics-my-reply');
+    const scoreEl = document.getElementById('staff-analytics-my-score');
+    const badgeEl = document.getElementById('staff-analytics-dept-badge');
+
+    if (titleEl) titleEl.textContent = deptName || 'Municipal Personnel';
+
+    if (myStats) {
+        if (replyEl) replyEl.textContent = `${myStats.replyRate}%`;
+        if (scoreEl) scoreEl.textContent = `${myStats.potentialScore}/100`;
+        if (badgeEl) badgeEl.textContent = `${myStats.potentialGrade} ${myStats.potentialBadge}`;
+    } else if (fullAnalytics && fullAnalytics.departmentPerformance && fullAnalytics.departmentPerformance.topDepartment) {
+        const topD = fullAnalytics.departmentPerformance.topDepartment;
+        if (replyEl) replyEl.textContent = `${topD.replyRate}%`;
+        if (scoreEl) scoreEl.textContent = `${topD.potentialScore}/100`;
+    }
+}
+
+function setStaffAreaChartType(type) {
+    currentStaffAreaChartType = type;
+    const btnBar = document.getElementById('btn-staff-area-bar');
+    const btnPie = document.getElementById('btn-staff-area-pie');
+
+    if (type === 'bar') {
+        if (btnBar) btnBar.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-xs transition-all';
+        if (btnPie) btnPie.className = 'px-3 py-1 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-800 transition-all';
+    } else {
+        if (btnPie) btnPie.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-xs transition-all';
+        if (btnBar) btnBar.className = 'px-3 py-1 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-800 transition-all';
+    }
+
+    if (currentStaffAnalyticsData && currentStaffAnalyticsData.analytics) {
+        renderStaffAreaChart(currentStaffAnalyticsData.analytics.areaAnalytics);
+    }
+}
+
+function renderStaffAreaChart(areaData) {
+    const canvas = document.getElementById('staff-area-chart');
+    if (!canvas || !window.Chart || !areaData) return;
+
+    if (staffAreaChartInstance) {
+        staffAreaChartInstance.destroy();
+    }
+
+    const labels = areaData.chartData.labels;
+    const data = areaData.chartData.data;
+    const colors = areaData.chartData.colors;
+
+    if (currentStaffAreaChartType === 'pie') {
+        staffAreaChartInstance = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 12,
+                            font: { family: '"Public Sans", sans-serif', size: 11, weight: '600' }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = ctx.raw || 0;
+                                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                return ` ${ctx.label}: ${val} complaints (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '60%'
+            }
+        });
+    } else {
+        staffAreaChartInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Complaints Reported',
+                    data: data,
+                    backgroundColor: colors,
+                    borderRadius: 8,
+                    maxBarThickness: 34
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = ctx.raw || 0;
+                                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                return ` Reports: ${val} (${pct}% of city total)`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: '"Public Sans", sans-serif', size: 11, weight: '500' } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1,
+                            font: { family: '"Public Sans", sans-serif', size: 11 }
+                        },
+                        grid: { color: '#f1f5f9' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function renderStaffAreaRanking(areas) {
+    const listEl = document.getElementById('staff-area-ranking-list');
+    if (!listEl || !areas) return;
+
+    if (areas.length === 0) {
+        listEl.innerHTML = '<div class="text-xs text-slate-400 py-3">No area complaint data available.</div>';
+        return;
+    }
+
+    const maxCount = Math.max(...areas.map(a => a.total), 1);
+
+    listEl.innerHTML = areas.map((a, idx) => {
+        const pctWidth = Math.round((a.total / maxCount) * 100);
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+
+        return `
+            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 transition-all">
+                <div class="flex items-center justify-between text-xs mb-1.5">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-500 w-5">${medal}</span>
+                        <span class="font-bold text-slate-900">${escapeHtml(a.area)}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-bold text-slate-900">${a.total} reports</span>
+                        <span class="text-[10px] font-semibold text-slate-400">(${a.percentage}%)</span>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-200/70 h-2 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500" style="width: ${pctWidth}%;"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderStaffDeptChart(deptData, myDeptName) {
+    const canvas = document.getElementById('staff-dept-chart');
+    if (!canvas || !window.Chart || !deptData) return;
+
+    if (staffDeptChartInstance) {
+        staffDeptChartInstance.destroy();
+    }
+
+    const labels = deptData.chartData.labels;
+    const replyRates = deptData.chartData.replyRates;
+    const potentialScores = deptData.chartData.potentialScores;
+
+    staffDeptChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Reply Rate (%)',
+                    data: replyRates,
+                    backgroundColor: '#2563eb',
+                    borderRadius: 6,
+                    maxBarThickness: 22
+                },
+                {
+                    label: 'Full Potential Score (0-100)',
+                    data: potentialScores,
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 6,
+                    maxBarThickness: 22
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 12,
+                        font: { family: '"Public Sans", sans-serif', size: 11, weight: '600' }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            return ` ${ctx.dataset.label}: ${ctx.raw}${ctx.datasetIndex === 0 ? '%' : '/100'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        font: { family: '"Public Sans", sans-serif', size: 10, weight: '500' },
+                        maxRotation: 20
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        stepSize: 20,
+                        callback: val => `${val}%`,
+                        font: { family: '"Public Sans", sans-serif', size: 11 }
+                    },
+                    grid: { color: '#f1f5f9' }
+                }
+            }
+        }
+    });
+}
+
+function renderStaffDeptTable(departments, myDeptName) {
+    const tbody = document.getElementById('staff-dept-table-body');
+    if (!tbody || !departments) return;
+
+    tbody.innerHTML = departments.map(d => {
+        const isMyDept = myDeptName && d.name.toLowerCase() === myDeptName.toLowerCase();
+        const highlightClass = isMyDept ? 'bg-blue-50/70 font-semibold border-l-4 border-blue-600' : 'hover:bg-slate-50/80';
+
+        return `
+            <tr class="${highlightClass} transition-colors">
+                <td class="py-2.5 px-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${d.color};"></span>
+                        <span class="font-bold ${isMyDept ? 'text-blue-900' : 'text-slate-900'}">${escapeHtml(d.name)}</span>
+                        ${isMyDept ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-600 text-white ml-1">YOU</span>' : ''}
+                    </div>
+                </td>
+                <td class="py-2.5 px-3 font-mono font-semibold text-slate-800">${d.total}</td>
+                <td class="py-2.5 px-3">
+                    <span class="font-mono font-bold text-blue-600">${d.replyRate}%</span>
+                </td>
+                <td class="py-2.5 px-3">
+                    <span class="font-mono font-bold text-emerald-600">${d.resolved}</span>
+                    <span class="text-[10px] text-slate-400 font-normal">(${d.resolutionRate}%)</span>
+                </td>
+                <td class="py-2.5 px-3">
+                    <span class="font-mono font-extrabold text-purple-700">${d.potentialScore}/100</span>
+                </td>
+                <td class="py-2.5 px-3">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${d.potentialColor}">
+                        ${d.potentialGrade} ${d.potentialBadge}
+                    </span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function handleStaffExportReport(format) {
+    if (!currentStaffAnalyticsData || !currentStaffAnalyticsData.analytics) {
+        showToast('Department analytics not loaded yet. Please wait.', 'warning');
+        return;
+    }
+    if (!window.CivicFixReportExporter) {
+        showToast('Report exporter is initializing. Please try again.', 'error');
+        return;
+    }
+
+    const context = {
+        userRole: 'staff',
+        userName: (currentUser && currentUser.name) ? currentUser.name : 'Municipal Staff Officer',
+        userDepartment: currentStaffAnalyticsData.staffDepartment || (currentUser && currentUser.department) || 'Municipal Department',
+        areaCanvasId: 'staff-area-chart',
+        deptCanvasId: 'staff-dept-chart'
+    };
+
+    window.CivicFixReportExporter.exportReport(format, currentStaffAnalyticsData.analytics, context);
 }
